@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ClassIslandPluginSdkVersion>1.7.106.2-dev-v2</ClassIslandPluginSdkVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="doc\**\*.cs" />
+        <Compile Remove="参考\**\*.cs" />
+        <AvaloniaResource Remove="doc\**\*" />
+        <AvaloniaResource Remove="参考\**\*" />
+        <AvaloniaXaml Remove="doc\**\*" />
+        <AvaloniaXaml Remove="参考\**\*" />
+        <Content Remove="doc\**\*" />
+        <Content Remove="参考\**\*" />
+        <EmbeddedResource Remove="doc\**\*" />
+        <EmbeddedResource Remove="参考\**\*" />
+        <None Remove="doc\**\*" />
+        <None Remove="参考\**\*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ClassIsland.PluginSdk" Version="$(ClassIslandPluginSdkVersion)">
+            <ExcludeAssets>runtime; native</ExcludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="manifest.yml">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="README.md">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="icon.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>

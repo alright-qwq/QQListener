@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/doc/classisland-docs-next" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/参考/ClassIsland" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/参考/ClassIsland/vendors/EdgeTtsSharp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/参考/QQListener(Py.ver)" vcs="Git" />
+  </component>
+</project>

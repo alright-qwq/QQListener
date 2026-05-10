@@ -6,8 +6,8 @@
 id: QQListener
 name: QQListener
 description: 监听 Windows 通知中心中的 QQ 消息，并转发为 ClassIsland 提醒。
-entranceAssembly: "QQListener.dll"
-url: https://example.com
+entranceAssembly: QQListener.dll
+url: https://github.com/alright-qwq/QQListener
 version: 0.0.2.0
 apiVersion: 2.0.0.0
 author: alright-qwq

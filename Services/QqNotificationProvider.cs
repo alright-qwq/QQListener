@@ -30,13 +30,14 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         _logger = logger;
     }
 
-    async Task IHostedService.StartAsync(CancellationToken cancellationToken)
+    Task IHostedService.StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("QQListener 监听已启动（扫描间隔 {Interval}s，QQOnly={QqOnly}）",
             _settings.ScanIntervalSeconds, _settings.QqOnly);
 
         _listenerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = Task.Run(() => ListenAsync(_listenerCts.Token), CancellationToken.None);
+        return Task.CompletedTask;
     }
 
     async Task IHostedService.StopAsync(CancellationToken cancellationToken)

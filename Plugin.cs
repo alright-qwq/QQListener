@@ -3,6 +3,7 @@ using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Extensions.Registry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using QQListener.Actions;
 using QQListener.Models;
 using QQListener.Services;
 using QQListener.Views.SettingsPages;
@@ -22,5 +23,9 @@ public class Plugin : PluginBase
         services.AddSingleton<QqMessageProcessor>();
         services.AddNotificationProvider<QqNotificationProvider>();
         services.AddSettingsPage<QqListenerSettingsPage>();
+
+        services.AddAction<EnableQqListenerAction>();
+        services.AddAction<DisableQqListenerAction>();
+        services.AddAction<ToggleQqListenerAction>();
     }
 }

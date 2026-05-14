@@ -4,5 +4,20 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 
+# IDE
+.idea/
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # Stakpak session files
 .stakpak/session*
+
+# Build artifacts
+cipx/
+*.md5sum
+generate-md5.ps1
+
+# Docs and references
+doc/
+参考/

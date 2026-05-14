@@ -1,30 +1,35 @@
-using System.Security.Cryptography;
-using System.Text;
+using Microsoft.Extensions.Logging;
 using QQListener.Models;
 
 namespace QQListener.Services;
 
-public class QqMessageProcessor(QqListenerSettings settings)
+public class QqMessageProcessor
 {
-    private readonly Dictionary<string, DateTimeOffset> _seen = new();
-    private HashSet<string> _activeToastKeys = [];
+    private readonly QqListenerSettings _settings;
+    private readonly ILogger<QqMessageProcessor> _logger;
+    private readonly Dictionary<int, DateTimeOffset> _seen = new();
+    private HashSet<int> _activeToastKeys = [];
+
+    public QqMessageProcessor(QqListenerSettings settings, ILogger<QqMessageProcessor> logger)
+    {
+        _settings = settings;
+        _logger = logger;
+    }
 
     public QqNotificationMessage? Process(IReadOnlyList<string> texts)
     {
         var normalized = NormalizeTexts(texts);
         if (normalized.Length < 2)
-        {
             return null;
-        }
 
         var key = Hash(normalized);
         var now = DateTimeOffset.Now;
-        if (_activeToastKeys.Contains(key))
-        {
-            return null;
-        }
 
-        if (_seen.TryGetValue(key, out var seenAt) && now - seenAt < TimeSpan.FromSeconds(settings.CooldownSeconds))
+        if (_activeToastKeys.Contains(key))
+            return null;
+
+        if (_seen.TryGetValue(key, out var seenAt)
+            && now - seenAt < TimeSpan.FromSeconds(_settings.CooldownSeconds))
         {
             return null;
         }
@@ -36,23 +41,27 @@ public class QqMessageProcessor(QqListenerSettings settings)
         var message = string.Join(Environment.NewLine, normalized.Skip(1));
         var fullText = string.Join(Environment.NewLine, normalized);
 
-        if (settings.Blacklist.Any(x => fullText.Contains(x, StringComparison.OrdinalIgnoreCase)))
+        if (_settings.Blacklist.Any(x => fullText.Contains(x, StringComparison.OrdinalIgnoreCase)))
         {
+            _logger.LogInformation("通知命中黑名单 [{Sender}]，已忽略。", sender);
             return null;
         }
 
-        var calling = settings.CallingEnabled
-                      && !string.IsNullOrWhiteSpace(settings.CallingKeyword)
-                      && fullText.Contains(settings.CallingKeyword, StringComparison.OrdinalIgnoreCase);
+        var calling = _settings.CallingEnabled
+                      && !string.IsNullOrWhiteSpace(_settings.CallingKeyword)
+                      && fullText.Contains(_settings.CallingKeyword, StringComparison.OrdinalIgnoreCase);
 
         var important = calling
-                        || settings.ImportantPersons.Any(x => sender.Contains(x, StringComparison.OrdinalIgnoreCase))
-                        || settings.ImportantKeywords.Any(x => fullText.Contains(x, StringComparison.OrdinalIgnoreCase))
-                        || (settings.SomeoneAtMe && sender.Contains("有人@我", StringComparison.OrdinalIgnoreCase));
+                        || _settings.ImportantPersons.Any(x => sender.Contains(x, StringComparison.OrdinalIgnoreCase))
+                        || _settings.ImportantKeywords.Any(x => fullText.Contains(x, StringComparison.OrdinalIgnoreCase))
+                        || (_settings.SomeoneAtMe && sender.Contains("有人@我", StringComparison.OrdinalIgnoreCase));
 
         var duration = calling
-            ? TimeSpan.FromSeconds(settings.CallingDurationSeconds)
-            : TimeSpan.FromSeconds(important ? settings.ImportantDurationSeconds : settings.NormalDurationSeconds);
+            ? TimeSpan.FromSeconds(_settings.CallingDurationSeconds)
+            : TimeSpan.FromSeconds(important ? _settings.ImportantDurationSeconds : _settings.NormalDurationSeconds);
+
+        if (calling)
+            _logger.LogInformation("检测到呼叫关键词 \"{Keyword}\"", _settings.CallingKeyword);
 
         return new QqNotificationMessage(sender, message, important, calling, duration);
     }
@@ -74,10 +83,15 @@ public class QqMessageProcessor(QqListenerSettings settings)
             .ToArray();
     }
 
-    private static string Hash(IEnumerable<string> values)
+    private static int Hash(IEnumerable<string> values)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('|', values)));
-        return Convert.ToHexString(bytes);
+        var hash = new HashCode();
+        foreach (var v in values)
+        {
+            hash.Add(v);
+        }
+
+        return hash.ToHashCode();
     }
 
     private void CleanupSeen(DateTimeOffset now)

@@ -4,7 +4,6 @@ using ClassIsland.Core.Models.Notification;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using QQListener.Models;
-using System;
 
 namespace QQListener.Services;
 
@@ -12,56 +11,41 @@ namespace QQListener.Services;
 public class QqNotificationProvider : NotificationProviderBase, IHostedService
 {
     private readonly QqListenerSettings _settings;
-    private readonly WindowsNotificationReader _reader = new();
+    private readonly WindowsNotificationReader _reader;
     private readonly QqMessageProcessor _processor;
     private readonly ILogger<QqNotificationProvider> _logger;
     private readonly HashSet<uint> _knownNotificationIds = [];
     private bool _hasInitializedNotifications;
     private CancellationTokenSource? _listenerCts;
 
-    public static QqNotificationProvider? Instance { get; private set; }
-
-    public QqNotificationProvider(QqListenerSettings settings, ILogger<QqNotificationProvider> logger)
+    public QqNotificationProvider(
+        QqListenerSettings settings,
+        WindowsNotificationReader reader,
+        QqMessageProcessor processor,
+        ILogger<QqNotificationProvider> logger)
     {
         _settings = settings;
-        _settings.Normalize();
-        _settings.Save();
+        _reader = reader;
+        _processor = processor;
         _logger = logger;
-        _processor = new QqMessageProcessor(_settings);
-        Instance = this;
     }
 
-    public new Task StartAsync(CancellationToken cancellationToken)
+    async Task IHostedService.StartAsync(CancellationToken cancellationToken)
     {
-        return StartListenerAsync(cancellationToken);
-    }
-
-    public new async Task StopAsync(CancellationToken cancellationToken)
-    {
-        await StopListenerAsync();
-    }
-
-    public Task StartListenerAsync(CancellationToken cancellationToken = default)
-    {
-        if (_listenerCts != null)
-        {
-            return Task.CompletedTask;
-        }
+        _logger.LogInformation("QQListener 监听已启动（扫描间隔 {Interval}s，QQOnly={QqOnly}）",
+            _settings.ScanIntervalSeconds, _settings.QqOnly);
 
         _listenerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = Task.Run(() => ListenAsync(_listenerCts.Token), CancellationToken.None);
-        return Task.CompletedTask;
     }
 
-    public async Task StopListenerAsync()
+    async Task IHostedService.StopAsync(CancellationToken cancellationToken)
     {
-        if (_listenerCts == null)
-        {
-            return;
-        }
+        if (_listenerCts == null) return;
 
         try
         {
+            _logger.LogInformation("QQListener 监听正在停止...");
             await _listenerCts.CancelAsync();
         }
         finally
@@ -69,6 +53,8 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             _listenerCts.Dispose();
             _listenerCts = null;
         }
+
+        _logger.LogInformation("QQListener 监听已停止。");
     }
 
     private async Task ListenAsync(CancellationToken cancellationToken)
@@ -99,35 +85,41 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             return;
         }
 
-        _settings.Normalize();
         var snapshots = await _reader.ReadToastNotificationsAsync();
+
         if (!_hasInitializedNotifications)
         {
             foreach (var snapshot in snapshots)
-            {
                 _knownNotificationIds.Add(snapshot.Id);
-            }
 
             _processor.UpdateActiveToasts(snapshots.Select(x => x.Texts));
             _hasInitializedNotifications = true;
+
+            _logger.LogInformation("QQListener 初始化完成，已忽略 {Count} 条现有通知。", snapshots.Count);
             return;
         }
 
         foreach (var snapshot in snapshots)
         {
-            if (!_knownNotificationIds.Add(snapshot.Id))
-            {
-                continue;
-            }
+            if (!_knownNotificationIds.Add(snapshot.Id)) continue;
+
+            _logger.LogDebug("新通知 [{AppName}] Id={Id} Texts={Count}条",
+                snapshot.AppName, snapshot.Id, snapshot.Texts.Count);
 
             if (_settings.QqOnly && !IsQqNotification(snapshot))
             {
+                _logger.LogDebug("跳过非 QQ 通知 [{AppName}]", snapshot.AppName);
                 continue;
             }
 
             var message = _processor.Process(snapshot.Texts);
             if (message != null)
             {
+                _logger.LogInformation("收到 {Type}消息: {Sender} {MessagePreview}",
+                    message.Calling ? "呼叫" : message.Important ? "重要" : "普通",
+                    message.Sender,
+                    Truncate(message.Message, 30));
+
                 ShowQqNotification(message);
             }
         }
@@ -143,13 +135,12 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             ? message.Sender
             : $"{message.Sender}{Environment.NewLine}{message.Message}";
 
-        void doShow()
+        void DoShow()
         {
             NotificationContent overlay;
 
             if (_settings.RollingSpeed <= 0)
             {
-                // No scrolling: show static simple text for the same duration computed by the processor            
                 overlay = NotificationContent.CreateSimpleTextContent(body, content =>
                 {
                     content.Duration = message.Duration;
@@ -180,19 +171,22 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 }
             });
         }
+
         if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-        {
-            doShow();
-        }
+            DoShow();
         else
-        {
-            Avalonia.Threading.Dispatcher.UIThread.Post(doShow);
-        }
+            Avalonia.Threading.Dispatcher.UIThread.Post(DoShow);
     }
 
     private static bool IsQqNotification(WindowsToastSnapshot snapshot)
     {
         return snapshot.AppName.Equals("QQ", StringComparison.OrdinalIgnoreCase)
                || snapshot.AppName.Contains("QQ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength) return value ?? "";
+        return value[..maxLength] + "…";
     }
 }

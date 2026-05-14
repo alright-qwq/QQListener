@@ -1,42 +1,58 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace QQListener.Models;
 
-public class QqListenerSettings
+public partial class QqListenerSettings : ObservableObject
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true
     };
 
-    public bool IsEnabled { get; set; } = true;
+    [ObservableProperty]
+    private bool _isEnabled = true;
 
-    public bool QqOnly { get; set; } = true;
+    [ObservableProperty]
+    private bool _qqOnly = true;
 
-    public bool SomeoneAtMe { get; set; } = true;
+    [ObservableProperty]
+    private bool _someoneAtMe = true;
 
-    public bool CallingEnabled { get; set; } = true;
+    [ObservableProperty]
+    private bool _callingEnabled = true;
 
-    public string CallingKeyword { get; set; } = "呼叫";
+    [ObservableProperty]
+    private string _callingKeyword = "呼叫";
 
-    public double ScanIntervalSeconds { get; set; } = 0.3;
+    [ObservableProperty]
+    private double _scanIntervalSeconds = 0.3;
 
-    public int CooldownSeconds { get; set; } = 3;
+    [ObservableProperty]
+    private int _cooldownSeconds = 3;
 
-    public int NormalDurationSeconds { get; set; } = 5;
+    [ObservableProperty]
+    private int _normalDurationSeconds = 5;
 
-    public int ImportantDurationSeconds { get; set; } = 10;
+    [ObservableProperty]
+    private int _importantDurationSeconds = 10;
 
-    public int CallingDurationSeconds { get; set; } = 600;
+    [ObservableProperty]
+    private int _callingDurationSeconds = 600;
 
-    public double RollingSpeed { get; set; } = 1.0;
+    [ObservableProperty]
+    private double _rollingSpeed = 1.0;
 
-    public string ImportantPersonsText { get; set; } = "";
+    [ObservableProperty]
+    private string _importantPersonsText = "";
 
-    public string ImportantKeywordsText { get; set; } = "作业\n通知\n考试";
+    [ObservableProperty]
+    private string _importantKeywordsText = "作业\n通知\n考试";
 
-    public string BlacklistText { get; set; } = "";
+    [ObservableProperty]
+    private string _blacklistText = "";
 
     [JsonIgnore]
     public IReadOnlyList<string> ImportantPersons => SplitLines(ImportantPersonsText);
@@ -47,35 +63,38 @@ public class QqListenerSettings
     [JsonIgnore]
     public IReadOnlyList<string> Blacklist => SplitLines(BlacklistText);
 
-    public static string SettingsPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "ClassIsland",
-        "Plugins",
-        "QQListener",
-        "settings.json");
+    [JsonIgnore]
+    public string SettingsDirectory { get; set; } = "";
 
-    public static QqListenerSettings Load()
+    [JsonIgnore]
+    public string SettingsFilePath => Path.Combine(SettingsDirectory, "settings.json");
+
+    public static QqListenerSettings Load(string directory)
     {
+        var path = Path.Combine(directory, "settings.json");
         try
         {
-            if (!File.Exists(SettingsPath))
+            if (!File.Exists(path))
             {
-                return new QqListenerSettings();
+                return new QqListenerSettings { SettingsDirectory = directory };
             }
 
-            var json = File.ReadAllText(SettingsPath);
-            return JsonSerializer.Deserialize<QqListenerSettings>(json) ?? new QqListenerSettings();
+            var json = File.ReadAllText(path);
+            var settings = JsonSerializer.Deserialize<QqListenerSettings>(json) ?? new QqListenerSettings();
+            settings.SettingsDirectory = directory;
+            return settings;
         }
-        catch
+        catch (Exception ex)
         {
-            return new QqListenerSettings();
+            Debug.WriteLine($"[QQListener] 加载设置失败，使用默认设置: {ex.Message}");
+            return new QqListenerSettings { SettingsDirectory = directory };
         }
     }
 
     public void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, JsonOptions));
+        Directory.CreateDirectory(SettingsDirectory);
+        File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(this, JsonOptions));
     }
 
     public void Normalize()
@@ -85,14 +104,13 @@ public class QqListenerSettings
         NormalDurationSeconds = Math.Clamp(NormalDurationSeconds, 1, 3600);
         ImportantDurationSeconds = Math.Clamp(ImportantDurationSeconds, 1, 3600);
         CallingDurationSeconds = Math.Clamp(CallingDurationSeconds, 1, 86400);
-        // Allow 0 to represent "no scrolling"
         RollingSpeed = Math.Clamp(RollingSpeed, 0.0, 4.0);
-        CallingKeyword = CallingKeyword.Trim();
+        CallingKeyword = (CallingKeyword ?? "").Trim();
     }
 
     private static IReadOnlyList<string> SplitLines(string value)
     {
-        return value
+        return (value ?? "")
             .Split(["\r\n", "\n", "\r"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToArray();

@@ -12,11 +12,15 @@ namespace QQListener;
 [PluginEntrance]
 public class Plugin : PluginBase
 {
+    [STAThread]
     public override void Initialize(HostBuilderContext context, IServiceCollection services)
     {
-        services.AddSingleton(QqListenerSettings.Load());
-        services.AddSettingsPage<QqListenerSettingsPage>();
+        var settings = QqListenerSettings.Load(PluginConfigFolder);
+        settings.Normalize();
+        services.AddSingleton(settings);
+        services.AddSingleton<WindowsNotificationReader>();
+        services.AddSingleton<QqMessageProcessor>();
         services.AddNotificationProvider<QqNotificationProvider>();
+        services.AddSettingsPage<QqListenerSettingsPage>();
     }
-
 }

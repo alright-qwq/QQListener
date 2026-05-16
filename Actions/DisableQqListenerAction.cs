@@ -5,22 +5,20 @@ using QQListener.Models;
 
 namespace QQListener.Actions;
 
-[ActionInfo("QQListener.Disable", "暂停 QQ 监听", "\uE716")]
-public class DisableQqListenerAction : ActionBase
+[ActionInfo("qqlistener.action.disable", "暂停 QQ 监听", "\uE716", addDefaultToMenu: false)]
+public class DisableQqListenerAction(QqListenerSettings settings, ILogger<DisableQqListenerAction> logger) : ActionBase
 {
-    private readonly QqListenerSettings _settings;
-    private readonly ILogger<DisableQqListenerAction> _logger;
-
-    public DisableQqListenerAction(QqListenerSettings settings, ILogger<DisableQqListenerAction> logger)
-    {
-        _settings = settings;
-        _logger = logger;
-    }
-
     protected override async Task OnInvoke()
     {
-        _settings.IsEnabled = false;
-        _logger.LogInformation("自动化：QQ 监听已暂停。");
+        settings.IsEnabled = false;
+        logger.LogInformation("自动化：QQ 监听已暂停。");
         await base.OnInvoke();
+    }
+
+    protected override async Task OnRevert()
+    {
+        settings.IsEnabled = true;
+        logger.LogInformation("自动化：QQ 监听已回退为开启。");
+        await base.OnRevert();
     }
 }

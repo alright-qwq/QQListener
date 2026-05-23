@@ -8,196 +8,321 @@
       mc:Ignorable="d"
       d:DesignHeight="800" d:DesignWidth="600">
 
-    <ScrollViewer>
-        <StackPanel Classes="settings-container animated-intro" Spacing="4">
+    <ci:DrawerHost x:Name="DrawerHost"
+                   DrawerPlacement="Right"
+                   IsDrawerOpen="{Binding IsFeatureDrawerOpen, Mode=TwoWay}"
+                   DrawerContent="{Binding FeatureDrawerContent}">
 
-            <!-- Page Header -->
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                <ci:FluentIcon FontSize="48"
-                    Glyph="&#xE715;"
-                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                    VerticalAlignment="Center"
-                    Margin="0,0,12,0" />
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock FontSize="24" FontWeight="SemiBold">QQListener</TextBlock>
-                    <TextBlock FontSize="13"
-                               Foreground="{DynamicResource TextFillColorTertiaryBrush}">
-                        监听 QQ 通知并转发为 ClassIsland 提醒
-                    </TextBlock>
-                </StackPanel>
-            </StackPanel>
+        <ci:DrawerHost.DrawerContentTemplate>
+            <DataTemplate>
+                <Grid Width="500"
+                      Background="{DynamicResource LayerFillColorDefaultBrush}">
 
-            <!-- 基础设置 -->
-            <TextBlock FontSize="18"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                       Margin="0,12,0,0">
-                基础设置
-            </TextBlock>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE73C;}"
-                                       Header="启用监听"
-                                       Description="开启或关闭 QQ 通知监听功能">
-                <controls:SettingsExpander.Footer>
-                    <ToggleSwitch IsChecked="{Binding Settings.IsEnabled, Mode=TwoWay}" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE715;}"
-                                       Header="仅处理 QQ 通知"
-                                       Description="只监听来自 QQ 应用的通知，忽略其他应用">
-                <controls:SettingsExpander.Footer>
-                    <ToggleSwitch IsChecked="{Binding Settings.QqOnly, Mode=TwoWay}" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE1D2;}"
-                                       Header="@ 我时作为重要消息"
-                                       Description="当 QQ 通知包含「有人@我」时，作为重要消息提醒">
-                <controls:SettingsExpander.Footer>
-                    <ToggleSwitch IsChecked="{Binding Settings.SomeoneAtMe, Mode=TwoWay}" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE717;}"
-                                       Header="启用呼叫关键词"
-                                       Description="检测消息中的呼叫关键词，触发特殊的长时间置顶提醒">
-                <controls:SettingsExpander.Footer>
-                    <ToggleSwitch IsChecked="{Binding Settings.CallingEnabled, Mode=TwoWay}" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE127;}"
-                                       Header="呼叫关键词"
-                                       Description="当消息包含此关键词时，将触发呼叫提醒">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.CallingKeyword, Mode=TwoWay}"
-                             Width="180"
-                             HorizontalAlignment="Right" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <!-- 时间与显示设置 -->
-            <TextBlock FontSize="18"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                       Margin="0,20,0,0">
-                时间与显示
-            </TextBlock>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE11D;}"
-                                       Header="扫描间隔（秒）"
-                                       Description="轮询 Windows 通知中心的间隔时间，范围 0.1~5 秒">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.ScanIntervalSeconds, Mode=TwoWay}"
-                             Width="100"
-                             HorizontalAlignment="Right" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE11D;}"
-                                       Header="去重冷却（秒）"
-                                       Description="相同内容的通知在冷却时间内不会重复提醒，范围 1~3600 秒">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.CooldownSeconds, Mode=TwoWay}"
-                             Width="100"
-                             HorizontalAlignment="Right" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
-                                       Header="普通消息显示时长（秒）"
-                                       Description="普通 QQ 消息的提醒显示时长，范围 1~3600 秒">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.NormalDurationSeconds, Mode=TwoWay}"
-                             Width="100"
-                             HorizontalAlignment="Right" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
-                                       Header="重要消息显示时长（秒）"
-                                       Description="重要 QQ 消息的提醒显示时长，范围 1~3600 秒">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.ImportantDurationSeconds, Mode=TwoWay}"
-                             Width="100"
-                             HorizontalAlignment="Right" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
-                                       Header="呼叫消息显示时长（秒）"
-                                       Description="呼叫类消息的提醒显示时长，范围 1~86400 秒">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.CallingDurationSeconds, Mode=TwoWay}"
-                             Width="100"
-                             HorizontalAlignment="Right" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE19B;}"
-                                       Header="滚动速度"
-                                       Description="消息文本滚动速度，0 表示不滚动，范围 0~4">
-                <controls:SettingsExpander.Footer>
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Slider Value="{Binding Settings.RollingSpeed, Mode=TwoWay}"
-                                Minimum="0"
-                                Maximum="4"
-                                TickFrequency="0.1"
-                                Width="160"
-                                VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding Settings.RollingSpeed, StringFormat={}{0:F2}}"
-                                   Width="40"
-                                   TextAlignment="Right"
+                    <Grid Grid.Row="0"
+                          Height="44"
+                          ColumnDefinitions="*,Auto"
+                          Margin="16,0,12,0">
+                        <TextBlock Grid.Column="0"
+                                   Text="QQListener 自动化动作"
+                                   Theme="{StaticResource SubtitleTextBlockStyle}"
                                    VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Theme="{StaticResource TransparentButton}"
+                                Click="OnCloseDrawerClick">
+                            <ci:FluentIcon Glyph="&#xE0F6;" FontSize="19" />
+                        </Button>
+                    </Grid>
+
+                    <Border Grid.Row="1"
+                            Margin="16,8,16,12"
+                            Padding="12,0"
+                            Height="40"
+                            Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                            BorderBrush="{DynamicResource SystemFillColorCautionBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ci:FluentIcon Glyph="&#xF430;"
+                                           FontSize="17"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                            <TextBlock Text="以下动作可在自动化工作流中配合触发器使用"
+                                       FontSize="13"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </StackPanel>
+                    </Border>
+
+                    <DataGrid Grid.Row="2"
+                              Margin="16,0,16,0"
+                              AutoGenerateColumns="False"
+                              ItemsSource="{Binding DataContext.ActionFeatureItems,
+                                      RelativeSource={RelativeSource AncestorType=ci:SettingsPageBase}}"
+                              CanUserSortColumns="True"
+                              CanUserReorderColumns="False"
+                              GridLinesVisibility="Horizontal"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+
+                        <DataGrid.Styles>
+                            <Style Selector="DataGridRow TextBlock">
+                                <Setter Property="TextElement.FontSize" Value="13" />
+                            </Style>
+                            <Style Selector="DataGridRow">
+                                <Setter Property="Height" Value="32" />
+                            </Style>
+                        </DataGrid.Styles>
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="启用"
+                                                    Width="75"
+                                                    Binding="{Binding IsEnabled, Mode=TwoWay}" />
+                            <DataGridTextColumn Header="类型"
+                                                Width="80"
+                                                IsReadOnly="True"
+                                                Binding="{Binding TypeDisplayName}" />
+                            <DataGridTextColumn Header="所属组别"
+                                                Width="100"
+                                                IsReadOnly="True"
+                                                Binding="{Binding GroupName}" />
+                            <DataGridTextColumn Header="名称"
+                                                Width="*"
+                                                IsReadOnly="True"
+                                                Binding="{Binding DisplayName}" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Grid Grid.Row="3"
+                          Height="68"
+                          Margin="16,0,16,0">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Spacing="8">
+                            <Button Content="关闭"
+                                    Click="OnCloseDrawerClick" />
+                        </StackPanel>
+                    </Grid>
+
+                </Grid>
+            </DataTemplate>
+        </ci:DrawerHost.DrawerContentTemplate>
+
+        <ScrollViewer>
+            <StackPanel Classes="settings-container animated-intro" Spacing="4">
+
+                <!-- Page Header -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <ci:FluentIcon FontSize="48"
+                        Glyph="&#xE715;"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        VerticalAlignment="Center"
+                        Margin="0,0,12,0" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock FontSize="24" FontWeight="SemiBold">QQListener</TextBlock>
+                        <TextBlock FontSize="13"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                            监听 QQ 通知并转发为 ClassIsland 提醒
+                        </TextBlock>
                     </StackPanel>
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
+                </StackPanel>
 
-            <!-- 过滤规则 -->
-            <TextBlock FontSize="18"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                       Margin="0,20,0,0">
-                过滤规则
-            </TextBlock>
+                <!-- 基础设置 -->
+                <TextBlock FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                           Margin="0,12,0,0">
+                    基础设置
+                </TextBlock>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE1D2;}"
-                                       Header="重要人物（每行一个）"
-                                       Description="来自这些人物的消息将被标记为重要消息">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.ImportantPersonsText, Mode=TwoWay}"
-                             AcceptsReturn="True"
-                             MinHeight="100"
-                             TextWrapping="Wrap"
-                             HorizontalAlignment="Stretch" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE73C;}"
+                                           Header="启用监听"
+                                           Description="开启或关闭 QQ 通知监听功能">
+                    <controls:SettingsExpander.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.IsEnabled, Mode=TwoWay}" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71B;}"
-                                       Header="重要关键词（每行一个）"
-                                       Description="包含这些关键词的消息将被标记为重要消息">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.ImportantKeywordsText, Mode=TwoWay}"
-                             AcceptsReturn="True"
-                             MinHeight="100"
-                             TextWrapping="Wrap"
-                             HorizontalAlignment="Stretch" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE715;}"
+                                           Header="仅处理 QQ 通知"
+                                           Description="只监听来自 QQ 应用的通知，忽略其他应用">
+                    <controls:SettingsExpander.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.QqOnly, Mode=TwoWay}" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71B;}"
-                                       Header="黑名单（每行一个）"
-                                       Description="包含这些关键词的消息将被忽略">
-                <controls:SettingsExpander.Footer>
-                    <TextBox Text="{Binding Settings.BlacklistText, Mode=TwoWay}"
-                             AcceptsReturn="True"
-                             MinHeight="100"
-                             TextWrapping="Wrap"
-                             HorizontalAlignment="Stretch" />
-                </controls:SettingsExpander.Footer>
-            </controls:SettingsExpander>
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE1D2;}"
+                                           Header="@ 我时作为重要消息"
+                                           Description="当 QQ 通知包含「有人@我」时，作为重要消息提醒">
+                    <controls:SettingsExpander.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.SomeoneAtMe, Mode=TwoWay}" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
 
-        </StackPanel>
-    </ScrollViewer>
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE717;}"
+                                           Header="启用呼叫关键词"
+                                           Description="检测消息中的呼叫关键词，触发特殊的长时间置顶提醒">
+                    <controls:SettingsExpander.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.CallingEnabled, Mode=TwoWay}" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE127;}"
+                                           Header="呼叫关键词"
+                                           Description="当消息包含此关键词时，将触发呼叫提醒">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.CallingKeyword, Mode=TwoWay}"
+                                 Width="180"
+                                 HorizontalAlignment="Right" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <!-- 时间与显示设置 -->
+                <TextBlock FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                           Margin="0,20,0,0">
+                    时间与显示
+                </TextBlock>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE11D;}"
+                                           Header="扫描间隔（秒）"
+                                           Description="轮询 Windows 通知中心的间隔时间，范围 0.1~5 秒">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.ScanIntervalSeconds, Mode=TwoWay}"
+                                 Width="100"
+                                 HorizontalAlignment="Right" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE11D;}"
+                                           Header="去重冷却（秒）"
+                                           Description="相同内容的通知在冷却时间内不会重复提醒，范围 1~3600 秒">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.CooldownSeconds, Mode=TwoWay}"
+                                 Width="100"
+                                 HorizontalAlignment="Right" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
+                                           Header="普通消息显示时长（秒）"
+                                           Description="普通 QQ 消息的提醒显示时长，范围 1~3600 秒">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.NormalDurationSeconds, Mode=TwoWay}"
+                                 Width="100"
+                                 HorizontalAlignment="Right" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
+                                           Header="重要消息显示时长（秒）"
+                                           Description="重要 QQ 消息的提醒显示时长，范围 1~3600 秒">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.ImportantDurationSeconds, Mode=TwoWay}"
+                                 Width="100"
+                                 HorizontalAlignment="Right" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
+                                           Header="呼叫消息显示时长（秒）"
+                                           Description="呼叫类消息的提醒显示时长，范围 1~86400 秒">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.CallingDurationSeconds, Mode=TwoWay}"
+                                 Width="100"
+                                 HorizontalAlignment="Right" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE19B;}"
+                                           Header="滚动速度"
+                                           Description="消息文本滚动速度，0 表示不滚动，范围 0~4">
+                    <controls:SettingsExpander.Footer>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Slider Value="{Binding Settings.RollingSpeed, Mode=TwoWay}"
+                                    Minimum="0"
+                                    Maximum="4"
+                                    TickFrequency="0.1"
+                                    Width="160"
+                                    VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Settings.RollingSpeed, StringFormat={}{0:F2}}"
+                                       Width="40"
+                                       TextAlignment="Right"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <!-- 过滤规则 -->
+                <TextBlock FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                           Margin="0,20,0,0">
+                    过滤规则
+                </TextBlock>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE1D2;}"
+                                           Header="重要人物（每行一个）"
+                                           Description="来自这些人物的消息将被标记为重要消息">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.ImportantPersonsText, Mode=TwoWay}"
+                                 AcceptsReturn="True"
+                                 MinHeight="100"
+                                 TextWrapping="Wrap"
+                                 HorizontalAlignment="Stretch" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71B;}"
+                                           Header="重要关键词（每行一个）"
+                                           Description="包含这些关键词的消息将被标记为重要消息">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.ImportantKeywordsText, Mode=TwoWay}"
+                                 AcceptsReturn="True"
+                                 MinHeight="100"
+                                 TextWrapping="Wrap"
+                                 HorizontalAlignment="Stretch" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71B;}"
+                                           Header="黑名单（每行一个）"
+                                           Description="包含这些关键词的消息将被忽略">
+                    <controls:SettingsExpander.Footer>
+                        <TextBox Text="{Binding Settings.BlacklistText, Mode=TwoWay}"
+                                 AcceptsReturn="True"
+                                 MinHeight="100"
+                                 TextWrapping="Wrap"
+                                 HorizontalAlignment="Stretch" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+                <!-- 自动化动作 -->
+                <TextBlock FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                           Margin="0,20,0,0">
+                    自动化动作
+                </TextBlock>
+
+                <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE079;}"
+                                           Header="自动化动作管理"
+                                           Description="查看可在自动化工作流中使用的 QQListener 动作">
+                    <controls:SettingsExpander.Footer>
+                        <Button Content="管理自动化动作..."
+                                Width="165"
+                                Click="OnManageFeaturesClick" />
+                    </controls:SettingsExpander.Footer>
+                </controls:SettingsExpander>
+
+            </StackPanel>
+        </ScrollViewer>
+    </ci:DrawerHost>
 </ci:SettingsPageBase>

@@ -64,6 +64,9 @@ public partial class QqListenerSettings : ObservableObject
     public IReadOnlyList<string> Blacklist => SplitLines(BlacklistText);
 
     [JsonIgnore]
+    public bool SuppressAutoSave { get; set; }
+
+    [JsonIgnore]
     public string SettingsDirectory { get; set; } = "";
 
     [JsonIgnore]

@@ -19,14 +19,11 @@ public class QqMessageProcessor
     public QqNotificationMessage? Process(IReadOnlyList<string> texts)
     {
         var normalized = NormalizeTexts(texts);
-        if (normalized.Length < 2)
+        if (normalized.Length == 0)
             return null;
 
         var key = Hash(normalized);
         var now = DateTimeOffset.Now;
-
-        if (_activeToastKeys.Contains(key))
-            return null;
 
         if (_seen.TryGetValue(key, out var seenAt)
             && now - seenAt < TimeSpan.FromSeconds(_settings.CooldownSeconds))
@@ -37,8 +34,8 @@ public class QqMessageProcessor
         _seen[key] = now;
         CleanupSeen(now);
 
-        var sender = normalized[0];
-        var message = string.Join(Environment.NewLine, normalized.Skip(1));
+        var sender = normalized.Length > 1 ? normalized[0] : "QQ";
+        var message = normalized.Length > 1 ? string.Join(Environment.NewLine, normalized.Skip(1)) : normalized[0];
         var fullText = string.Join(Environment.NewLine, normalized);
 
         if (_settings.Blacklist.Any(x => fullText.Contains(x, StringComparison.OrdinalIgnoreCase)))
@@ -73,6 +70,12 @@ public class QqMessageProcessor
             .Where(x => x.Length > 0)
             .Select(Hash)
             .ToHashSet();
+    }
+
+    public void ClearState()
+    {
+        _seen.Clear();
+        _activeToastKeys.Clear();
     }
 
     private static string[] NormalizeTexts(IEnumerable<string> texts)

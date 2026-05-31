@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ClassIsland.Core.Abstractions.Services.NotificationProviders;
 using ClassIsland.Core.Attributes;
 using ClassIsland.Core.Models.Notification;
@@ -13,8 +14,9 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     private readonly QqListenerSettings _settings;
     private readonly WindowsNotificationReader _reader;
     private readonly QqMessageProcessor _processor;
+    private readonly LatestMessageState _latestMessage;
     private readonly ILogger<QqNotificationProvider> _logger;
-    private readonly HashSet<uint> _knownNotificationIds = [];
+    private readonly Dictionary<uint, int> _knownNotificationKeys = new();
     private bool _hasInitializedNotifications;
     private CancellationTokenSource? _listenerCts;
 
@@ -22,12 +24,30 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         QqListenerSettings settings,
         WindowsNotificationReader reader,
         QqMessageProcessor processor,
+        LatestMessageState latestMessage,
         ILogger<QqNotificationProvider> logger)
     {
         _settings = settings;
         _reader = reader;
         _processor = processor;
+        _latestMessage = latestMessage;
         _logger = logger;
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(QqListenerSettings.IsEnabled) && _settings.IsEnabled)
+        {
+            ResetDetectionState();
+        }
+    }
+
+    private void ResetDetectionState()
+    {
+        _knownNotificationKeys.Clear();
+        _processor.ClearState();
+        _hasInitializedNotifications = false;
     }
 
     Task IHostedService.StartAsync(CancellationToken cancellationToken)
@@ -86,28 +106,28 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             return;
         }
 
-        var snapshots = await _reader.ReadToastNotificationsAsync();
+        var allSnapshots = await _reader.ReadToastNotificationsAsync();
+        var snapshots = (_settings.QqOnly
+                ? allSnapshots.Where(x => IsQqNotification(x) || (string.IsNullOrWhiteSpace(x.AppName) && LooksLikeQqMessage(x.Texts)))
+                : allSnapshots)
+            .ToArray();
 
         if (!_hasInitializedNotifications)
         {
-            foreach (var snapshot in snapshots)
-                _knownNotificationIds.Add(snapshot.Id);
-
-            _processor.UpdateActiveToasts(snapshots.Select(x => x.Texts));
             _hasInitializedNotifications = true;
-
-            _logger.LogInformation("QQListener 初始化完成，已忽略 {Count} 条现有通知。", snapshots.Count);
-            return;
+            _logger.LogInformation("QQListener 初始化完成，当前可见 QQ 通知 {Count} 条。", snapshots.Length);
         }
 
         foreach (var snapshot in snapshots)
         {
-            if (!_knownNotificationIds.Add(snapshot.Id)) continue;
+            var snapshotKey = GetSnapshotKey(snapshot);
+            if (_knownNotificationKeys.TryGetValue(snapshot.Id, out var knownKey) && knownKey == snapshotKey) continue;
+            _knownNotificationKeys[snapshot.Id] = snapshotKey;
 
-            _logger.LogDebug("新通知 [{AppName}] Id={Id} Texts={Count}条",
+            _logger.LogDebug("新通知或通知内容变化 [{AppName}] Id={Id} Texts={Count}条",
                 snapshot.AppName, snapshot.Id, snapshot.Texts.Count);
 
-            if (_settings.QqOnly && !IsQqNotification(snapshot))
+            if (_settings.QqOnly && !IsQqNotification(snapshot) && !LooksLikeQqMessage(snapshot.Texts))
             {
                 _logger.LogDebug("跳过非 QQ 通知 [{AppName}]", snapshot.AppName);
                 continue;
@@ -121,15 +141,20 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                     message.Sender,
                     Truncate(message.Message, 30));
 
+                _latestMessage.Update(message.Sender, message.Message, message.Important, message.Calling);
                 ShowQqNotification(message);
             }
         }
 
-        _knownNotificationIds.IntersectWith(snapshots.Select(x => x.Id));
+        var visibleIds = snapshots.Select(x => x.Id).ToHashSet();
+        foreach (var id in _knownNotificationKeys.Keys.Where(x => !visibleIds.Contains(x)).ToArray())
+        {
+            _knownNotificationKeys.Remove(id);
+        }
         _processor.UpdateActiveToasts(snapshots.Select(x => x.Texts));
     }
 
-    private void ShowQqNotification(QqNotificationMessage message)
+    public void ShowQqNotification(QqNotificationMessage message)
     {
         var title = message.Calling ? "QQ 呼叫" : message.Important ? "重要 QQ 消息" : "QQ 消息";
         var body = string.IsNullOrWhiteSpace(message.Message)
@@ -179,10 +204,33 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             Avalonia.Threading.Dispatcher.UIThread.Post(DoShow);
     }
 
+    private static int GetSnapshotKey(WindowsToastSnapshot snapshot)
+    {
+        var hash = new HashCode();
+        hash.Add(snapshot.AppName, StringComparer.OrdinalIgnoreCase);
+        foreach (var text in snapshot.Texts)
+        {
+            hash.Add(text);
+        }
+        return hash.ToHashCode();
+    }
+
     private static bool IsQqNotification(WindowsToastSnapshot snapshot)
     {
         return snapshot.AppName.Equals("QQ", StringComparison.OrdinalIgnoreCase)
                || snapshot.AppName.Contains("QQ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeQqMessage(IReadOnlyList<string> texts)
+    {
+        if (texts.Count == 0) return false;
+        var fullText = string.Join('\n', texts);
+        return fullText.Contains("QQ", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("有人@我", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("[图片]", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("[表情]", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("[语音]", StringComparison.OrdinalIgnoreCase)
+               || texts.Count >= 2;
     }
 
     private static string Truncate(string value, int maxLength)

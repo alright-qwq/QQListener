@@ -1,0 +1,29 @@
+<ci:ComponentBase x:Class="QQListener.Components.LatestQqMessageComponent"
+                  x:TypeArguments="settings:LatestQqMessageComponentSettings"
+                  xmlns="https://github.com/avaloniaui"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                  xmlns:ci="http://classisland.tech/schemas/xaml/core"
+                  xmlns:local="clr-namespace:QQListener.Components"
+                  xmlns:settings="clr-namespace:QQListener.Models.ComponentSettings"
+                  AttachedToVisualTree="Visual_OnAttachedToVisualTree"
+                  DetachedFromVisualTree="Visual_OnDetachedFromVisualTree">
+    <StackPanel DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:LatestQqMessageComponent}}"
+                Orientation="Horizontal"
+                Spacing="6"
+                VerticalAlignment="Center">
+        <TextBlock Text="{Binding StatusText}"
+                   IsVisible="{Binding IsStatusVisible}"
+                   FontSize="12"
+                   FontWeight="SemiBold"
+                   Foreground="OrangeRed"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="{Binding SenderText}"
+                   IsVisible="{Binding IsSenderVisible}"
+                   FontWeight="SemiBold"
+                   TextTrimming="CharacterEllipsis"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="{Binding MessageText}"
+                   TextTrimming="CharacterEllipsis"
+                   VerticalAlignment="Center" />
+    </StackPanel>
+</ci:ComponentBase>

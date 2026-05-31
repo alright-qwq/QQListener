@@ -12,6 +12,9 @@ public partial class QqListenerSettings : ObservableObject
         WriteIndented = true
     };
 
+    private readonly object _saveLock = new();
+    private volatile int _suppressAutoSaveCount;
+
     [ObservableProperty]
     private bool _isEnabled = true;
 
@@ -64,7 +67,7 @@ public partial class QqListenerSettings : ObservableObject
     public IReadOnlyList<string> Blacklist => SplitLines(BlacklistText);
 
     [JsonIgnore]
-    public bool SuppressAutoSave { get; set; }
+    public bool SuppressAutoSave => _suppressAutoSaveCount > 0;
 
     [JsonIgnore]
     public string SettingsDirectory { get; set; } = "";
@@ -96,8 +99,32 @@ public partial class QqListenerSettings : ObservableObject
 
     public void Save()
     {
-        Directory.CreateDirectory(SettingsDirectory);
-        File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(this, JsonOptions));
+        lock (_saveLock)
+        {
+            Directory.CreateDirectory(SettingsDirectory);
+            File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(this, JsonOptions));
+        }
+    }
+
+    /// <summary>
+    /// 原子地修改设置并保存。在修改期间抑制自动保存。
+    /// </summary>
+    public void ModifyAndSave(Action<QqListenerSettings> modifier)
+    {
+        lock (_saveLock)
+        {
+            Interlocked.Increment(ref _suppressAutoSaveCount);
+            try
+            {
+                modifier(this);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _suppressAutoSaveCount);
+            }
+            Directory.CreateDirectory(SettingsDirectory);
+            File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(this, JsonOptions));
+        }
     }
 
     public void Normalize()

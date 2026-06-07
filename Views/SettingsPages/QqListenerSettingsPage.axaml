@@ -334,7 +334,7 @@
                                     VerticalAlignment="Center">
                             <TextBlock>
                                 <Run Text="QQListener  " FontSize="20" FontWeight="SemiBold" />
-                                <Run Text="{Binding PluginInfo.Version, StringFormat=v{0}}"
+                                <Run Text="{Binding PluginInfo.VersionDisplay, Mode=OneWay}"
                                      FontSize="14"
                                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             </TextBlock>

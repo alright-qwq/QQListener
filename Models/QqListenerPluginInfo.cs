@@ -36,6 +36,10 @@ public sealed class QqListenerPluginInfo
         }
     }
 
+    /// <summary>关于卡片版本号显示，例如 "v1.0.1.0"。预格式化以避免在 XAML 里
+    /// 用 StringFormat 触发 Run.Text 的 TwoWay 回写循环（会导致 StackOverflow）。</summary>
+    public string VersionDisplay => string.IsNullOrWhiteSpace(Version) ? "v 未知" : $"v{Version}";
+
     /// <summary>关于卡片："Copyright © 2026 alright-qwq"。</summary>
     public string CopyrightLine =>
         $"Copyright © {DefaultCopyrightYear} {(string.IsNullOrWhiteSpace(Author) ? "未知作者" : Author)}";

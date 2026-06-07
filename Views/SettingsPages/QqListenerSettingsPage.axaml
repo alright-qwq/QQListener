@@ -310,6 +310,81 @@
                                        Header="最近错误"
                                        Description="{Binding Diagnostics.LastErrorSummary}" />
 
+            <!-- 关于 -->
+            <TextBlock FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                       Margin="0,20,0,0">
+                关于
+            </TextBlock>
+
+            <Border CornerRadius="4"
+                    ClipToBounds="True"
+                    Margin="0,4,0,4">
+                <controls:SettingsExpanderItem>
+                    <Grid Margin="12" ColumnDefinitions="Auto,*,Auto">
+                        <ci:FluentIcon Glyph="&#xE02B;"
+                                       Grid.Column="0"
+                                       FontSize="48"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock>
+                                <Run Text="QQListener  " FontSize="20" FontWeight="SemiBold" />
+                                <Run Text="{Binding PluginInfo.Version, StringFormat=v{0}}"
+                                     FontSize="14"
+                                     Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </TextBlock>
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="{Binding PluginInfo.CopyrightLine}" />
+                            <TextBlock FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                       Text="{Binding PluginInfo.LicenseLine}" />
+                            <TextBlock FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                       Text="{Binding PluginInfo.SdkLine}" />
+                            <TextBlock FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                       Text="{Binding PluginInfo.OriginalAuthor}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    Orientation="Horizontal"
+                                    Spacing="4"
+                                    VerticalAlignment="Top">
+                            <Button Padding="8,5"
+                                    BorderBrush="Transparent"
+                                    Background="Transparent"
+                                    ToolTip.Tip="GitHub 仓库"
+                                    Command="{x:Static ci:UriNavigationCommands.UriNavigationCommand}"
+                                    CommandParameter="{Binding PluginInfo.Url}">
+                                <ci:FluentIcon Glyph="&#xE71B;" FontSize="18" />
+                            </Button>
+                            <Button Padding="8,5"
+                                    BorderBrush="Transparent"
+                                    Background="Transparent"
+                                    ToolTip.Tip="常见问题 Q&amp;A"
+                                    Command="{x:Static ci:UriNavigationCommands.UriNavigationCommand}"
+                                    CommandParameter="{Binding PluginInfo.QaUrl}">
+                                <ci:FluentIcon Glyph="&#xE897;" FontSize="18" />
+                            </Button>
+                            <Button Padding="8,5"
+                                    BorderBrush="Transparent"
+                                    Background="Transparent"
+                                    ToolTip.Tip="报告问题"
+                                    Command="{x:Static ci:UriNavigationCommands.UriNavigationCommand}"
+                                    CommandParameter="{Binding PluginInfo.IssuesUrl}">
+                                <ci:FluentIcon Glyph="&#xEA39;" FontSize="18" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </controls:SettingsExpanderItem>
+            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </ci:SettingsPageBase>

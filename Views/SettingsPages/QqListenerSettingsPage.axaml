@@ -14,7 +14,7 @@
             <!-- Page Header -->
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                 <ci:FluentIcon FontSize="48"
-                    Glyph="&#xE715;"
+                    Glyph="&#xE02B;"
                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                     VerticalAlignment="Center"
                     Margin="0,0,12,0" />
@@ -35,7 +35,7 @@
                 基础设置
             </TextBlock>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE73C;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE72A;}"
                                        Header="启用监听"
                                        Description="开启或关闭 QQ 通知监听功能">
                 <controls:SettingsExpander.Footer>
@@ -43,7 +43,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE715;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE16C;}"
                                        Header="仅处理 QQ 通知"
                                        Description="只监听来自 QQ 应用的通知，忽略其他应用">
                 <controls:SettingsExpander.Footer>
@@ -51,7 +51,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE1D2;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE77B;}"
                                        Header="@ 我时作为重要消息"
                                        Description="当 QQ 通知包含「有人@我」时，作为重要消息提醒">
                 <controls:SettingsExpander.Footer>
@@ -67,7 +67,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE127;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE70F;}"
                                        Header="呼叫关键词"
                                        Description="当消息包含此关键词时，将触发呼叫提醒">
                 <controls:SettingsExpander.Footer>
@@ -85,7 +85,7 @@
                 时间与显示
             </TextBlock>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE11D;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE916;}"
                                        Header="扫描间隔（秒）"
                                        Description="轮询 Windows 通知中心的间隔时间，范围 0.1~5 秒">
                 <controls:SettingsExpander.Footer>
@@ -95,7 +95,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE11D;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE4D6;}"
                                        Header="去重冷却（秒）"
                                        Description="相同内容的通知在冷却时间内不会重复提醒，范围 1~3600 秒">
                 <controls:SettingsExpander.Footer>
@@ -105,7 +105,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE917;}"
                                        Header="普通消息显示时长（秒）"
                                        Description="普通 QQ 消息的提醒显示时长，范围 1~3600 秒">
                 <controls:SettingsExpander.Footer>
@@ -115,7 +115,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE735;}"
                                        Header="重要消息显示时长（秒）"
                                        Description="重要 QQ 消息的提醒显示时长，范围 1~3600 秒">
                 <controls:SettingsExpander.Footer>
@@ -125,7 +125,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE26D;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE02A;}"
                                        Header="呼叫消息显示时长（秒）"
                                        Description="呼叫类消息的提醒显示时长，范围 1~86400 秒">
                 <controls:SettingsExpander.Footer>
@@ -135,7 +135,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE19B;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE9F5;}"
                                        Header="滚动速度"
                                        Description="消息文本滚动速度，0 表示不滚动，范围 0~4">
                 <controls:SettingsExpander.Footer>
@@ -162,7 +162,7 @@
                 过滤规则
             </TextBlock>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE1D2;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE92F;}"
                                        Header="重要人物（每行一个）"
                                        Description="来自这些人物的消息将被标记为重要消息">
                 <controls:SettingsExpander.Footer>
@@ -174,7 +174,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71B;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE6B1;}"
                                        Header="重要关键词（每行一个）"
                                        Description="包含这些关键词的消息将被标记为重要消息">
                 <controls:SettingsExpander.Footer>
@@ -186,7 +186,7 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71B;}"
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71D;}"
                                        Header="黑名单（每行一个）"
                                        Description="包含这些关键词的消息将被忽略">
                 <controls:SettingsExpander.Footer>

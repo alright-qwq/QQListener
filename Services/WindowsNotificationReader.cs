@@ -24,26 +24,38 @@ public sealed class WindowsNotificationReader(ILogger<WindowsNotificationReader>
             logger.LogInformation("已获取通知监听权限。");
         }
 
-        var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
-        return notifications
-            .Select(ReadSnapshot)
-            .Where(x => x.Texts.Count > 0)
-            .ToArray();
+        try
+        {
+            var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+            return notifications
+                .Select(ReadSnapshot)
+                .Where(x => x.Texts.Count > 0)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "读取通知失败，将在下次轮询时重新请求权限。");
+            _accessStatus = UserNotificationListenerAccessStatus.Unspecified;
+            return [];
+        }
     }
 
     private WindowsToastSnapshot ReadSnapshot(UserNotification notification)
     {
         var texts = new List<string>();
         var appName = "";
+        var appId = "";
 
         try
         {
             appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? "";
+            appId = notification.AppInfo?.AppUserModelId ?? "";
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "读取通知应用名称失败。");
             appName = "";
+            appId = "";
         }
 
         try
@@ -63,11 +75,11 @@ public sealed class WindowsNotificationReader(ILogger<WindowsNotificationReader>
         catch (Exception ex)
         {
             logger.LogWarning(ex, "读取通知文本内容失败。");
-            return new WindowsToastSnapshot(notification.Id, appName, []);
+            return new WindowsToastSnapshot(notification.Id, appName, appId, []);
         }
 
-        return new WindowsToastSnapshot(notification.Id, appName, texts.Distinct().ToArray());
+        return new WindowsToastSnapshot(notification.Id, appName, appId, texts.ToArray());
     }
 }
 
-public sealed record WindowsToastSnapshot(uint Id, string AppName, IReadOnlyList<string> Texts);
+public sealed record WindowsToastSnapshot(uint Id, string AppName, string AppId, IReadOnlyList<string> Texts);

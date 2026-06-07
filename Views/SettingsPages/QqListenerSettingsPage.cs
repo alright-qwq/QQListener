@@ -1,4 +1,3 @@
-using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Controls;
 using ClassIsland.Core.Attributes;
@@ -6,7 +5,7 @@ using QQListener.Models;
 
 namespace QQListener.Views.SettingsPages;
 
-[SettingsPageInfo("qqlistener.settings", "QQListener", "\uE713", "\uE715")]
+[SettingsPageInfo("qqlistener.settings", "QQListener", "\uE02B", "\uE02A")]
 public partial class QqListenerSettingsPage : SettingsPageBase
 {
     private readonly QqListenerSettings _settings;
@@ -20,7 +19,24 @@ public partial class QqListenerSettingsPage : SettingsPageBase
         DataContext = this;
         InitializeComponent();
 
-        _settings.PropertyChanged += (_, _) => DebounceSave();
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        DebounceSave();
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        if (_saveTimer != null)
+        {
+            _saveTimer.Stop();
+            _saveTimer.Tick -= OnSaveTimerTick;
+            _saveTimer = null;
+        }
     }
 
     private void DebounceSave()

@@ -17,12 +17,10 @@ namespace QQListener;
 [PluginEntrance]
 public class Plugin : PluginBase
 {
-    [STAThread]
     public override void Initialize(HostBuilderContext context, IServiceCollection services)
     {
         var settings = QqListenerSettings.Load(PluginConfigFolder);
         settings.Normalize();
-        settings.Save();
         services.AddSingleton(settings);
         services.AddSingleton<WindowsNotificationReader>();
         services.AddSingleton<QqMessageProcessor>();
@@ -47,7 +45,7 @@ public class Plugin : PluginBase
         const string groupName = "QQListener 行动";
         if (!IActionService.ActionMenuTree.Contains(groupName))
         {
-            IActionService.ActionMenuTree.Add(new ActionMenuTreeGroup(groupName, "\uE715"));
+            IActionService.ActionMenuTree.Add(new ActionMenuTreeGroup(groupName, "\uE02B"));
         }
 
         var children = IActionService.ActionMenuTree[groupName];
@@ -65,7 +63,7 @@ public class Plugin : PluginBase
             children.Add(new ActionMenuTreeItem(
                 "QQListener.ShowLatestMessage",
                 "显示最后一条 QQ 消息",
-                "\uE715"));
+                "\uE02B"));
         }
     }
 }

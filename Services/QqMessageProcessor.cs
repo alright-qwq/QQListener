@@ -9,6 +9,7 @@ public class QqMessageProcessor
     private readonly ILogger<QqMessageProcessor> _logger;
     private readonly Dictionary<int, DateTimeOffset> _seen = new();
     private HashSet<int> _activeToastKeys = [];
+    private readonly object _lock = new();
 
     public QqMessageProcessor(QqListenerSettings settings, ILogger<QqMessageProcessor> logger)
     {
@@ -19,23 +20,65 @@ public class QqMessageProcessor
     public QqNotificationMessage? Process(IReadOnlyList<string> texts)
     {
         var normalized = NormalizeTexts(texts);
+        normalized = RemoveNoiseLines(normalized);
         if (normalized.Length == 0)
             return null;
 
         var key = Hash(normalized);
         var now = DateTimeOffset.Now;
 
-        if (_seen.TryGetValue(key, out var seenAt)
-            && now - seenAt < TimeSpan.FromSeconds(_settings.CooldownSeconds))
+        lock (_lock)
         {
-            return null;
+            if (_activeToastKeys.Contains(key))
+                return null;
+
+            if (_seen.TryGetValue(key, out var seenAt)
+                && now - seenAt < TimeSpan.FromSeconds(_settings.CooldownSeconds))
+            {
+                return null;
+            }
+
+            _seen[key] = now;
+            CleanupSeen(now);
         }
 
-        _seen[key] = now;
-        CleanupSeen(now);
+        var sender = "QQ";
+        var message = "";
 
-        var sender = normalized.Length > 1 ? normalized[0] : "QQ";
-        var message = normalized.Length > 1 ? string.Join(Environment.NewLine, normalized.Skip(1)) : normalized[0];
+        if (normalized.Length == 1)
+        {
+            SplitSingleLine(normalized[0], ref sender, ref message);
+        }
+        else
+        {
+            // Group notifications: ["GroupName", "Person：Content"] or ["GroupName", "Person", "Content"]
+            // Try splitting the last element to extract sender from "Person：Content" format.
+            var lastLine = normalized[^1];
+            var splitDone = false;
+            foreach (var separator in new[] { "\uff1a", ": " })
+            {
+                var idx = lastLine.IndexOf(separator, StringComparison.Ordinal);
+                if (idx <= 0 || idx >= lastLine.Length - separator.Length) continue;
+                sender = lastLine[..idx].Trim();
+                message = lastLine[(idx + separator.Length)..].Trim();
+                if (string.IsNullOrWhiteSpace(sender)) continue;
+                splitDone = true;
+                break;
+            }
+
+            if (!splitDone)
+            {
+                sender = normalized[0];
+                message = string.Join(Environment.NewLine, normalized.Skip(1));
+            }
+            else if (normalized.Length > 2)
+            {
+                // Keep middle lines as part of the message (e.g. ["Group", "Person", "Content"])
+                var middle = string.Join(Environment.NewLine, normalized[1..^1]);
+                if (!string.IsNullOrWhiteSpace(middle))
+                    message = middle + Environment.NewLine + message;
+            }
+        }
         var fullText = string.Join(Environment.NewLine, normalized);
 
         if (_settings.Blacklist.Any(x => fullText.Contains(x, StringComparison.OrdinalIgnoreCase)))
@@ -65,17 +108,24 @@ public class QqMessageProcessor
 
     public void UpdateActiveToasts(IEnumerable<IReadOnlyList<string>> visibleToasts)
     {
-        _activeToastKeys = visibleToasts
+        var newKeys = visibleToasts
             .Select(NormalizeTexts)
             .Where(x => x.Length > 0)
             .Select(Hash)
             .ToHashSet();
+        lock (_lock)
+        {
+            _activeToastKeys = newKeys;
+        }
     }
 
     public void ClearState()
     {
-        _seen.Clear();
-        _activeToastKeys.Clear();
+        lock (_lock)
+        {
+            _seen.Clear();
+            _activeToastKeys.Clear();
+        }
     }
 
     private static string[] NormalizeTexts(IEnumerable<string> texts)
@@ -84,6 +134,36 @@ public class QqMessageProcessor
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => string.Join(' ', x.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)))
             .ToArray();
+    }
+
+    private static string[] RemoveNoiseLines(string[] values)
+    {
+        return values
+            .Where(x => !x.Equals("QQ", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static void SplitSingleLine(string text, ref string sender, ref string message)
+    {
+        // Handles "GroupName Person：Content" → sender=Person, message=Content
+        // and "Person：Content" → sender=Person, message=Content
+        // Use IndexOf (first occurrence) instead of LastIndexOf: when the message body
+        // itself contains the separator (e.g. "Alice：Hello：World"), LastIndexOf would
+        // incorrectly treat "Alice：Hello" as the sender. The first separator is the
+        // boundary between sender and content.
+        var separators = new[] { "\uff1a", ": " };
+        foreach (var separator in separators)
+        {
+            var index = text.IndexOf(separator, StringComparison.Ordinal);
+            if (index <= 0 || index >= text.Length - separator.Length) continue;
+            var candidate = text[..index].Trim();
+            var rest = text[(index + separator.Length)..].Trim();
+            if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(rest)) continue;
+            sender = candidate;
+            message = rest;
+            return;
+        }
     }
 
     private static int Hash(IEnumerable<string> values)

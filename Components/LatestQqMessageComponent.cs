@@ -8,46 +8,65 @@ using QQListener.Models.ComponentSettings;
 
 namespace QQListener.Components;
 
-[ComponentInfo("5F4F88A9-C0A5-4F11-A1E8-BD8ED0F5D1D6", "最后 QQ 消息", "\uE715", "显示 QQListener 最近收到的一条 QQ 消息。")]
-public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageComponentSettings>, INotifyPropertyChanged
+[ComponentInfo("5F4F88A9-C0A5-4F11-A1E8-BD8ED0F5D1D6", "最后 QQ 消息", "\uE02B", "显示 QQListener 最近收到的一条 QQ 消息。")]
+public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageComponentSettings>
 {
     private LatestMessageState? _latestMessage;
+
+    public static readonly DirectProperty<LatestQqMessageComponent, string> StatusTextProperty =
+        AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, string>(
+            nameof(StatusText), o => o.StatusText);
+
+    public static readonly DirectProperty<LatestQqMessageComponent, string> SenderTextProperty =
+        AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, string>(
+            nameof(SenderText), o => o.SenderText);
+
+    public static readonly DirectProperty<LatestQqMessageComponent, string> MessageTextProperty =
+        AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, string>(
+            nameof(MessageText), o => o.MessageText);
+
+    public static readonly DirectProperty<LatestQqMessageComponent, bool> IsStatusVisibleProperty =
+        AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, bool>(
+            nameof(IsStatusVisible), o => o.IsStatusVisible);
+
+    public static readonly DirectProperty<LatestQqMessageComponent, bool> IsSenderVisibleProperty =
+        AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, bool>(
+            nameof(IsSenderVisible), o => o.IsSenderVisible);
+
     private string _statusText = "";
     private string _senderText = "";
     private string _messageText = "";
     private bool _isStatusVisible;
     private bool _isSenderVisible;
 
-    public new event PropertyChangedEventHandler? PropertyChanged;
-
     public string StatusText
     {
         get => _statusText;
-        private set => SetField(ref _statusText, value, nameof(StatusText));
+        private set => SetAndRaise(StatusTextProperty, ref _statusText, value);
     }
 
     public string SenderText
     {
         get => _senderText;
-        private set => SetField(ref _senderText, value, nameof(SenderText));
+        private set => SetAndRaise(SenderTextProperty, ref _senderText, value);
     }
 
     public string MessageText
     {
         get => _messageText;
-        private set => SetField(ref _messageText, value, nameof(MessageText));
+        private set => SetAndRaise(MessageTextProperty, ref _messageText, value);
     }
 
     public bool IsStatusVisible
     {
         get => _isStatusVisible;
-        private set => SetField(ref _isStatusVisible, value, nameof(IsStatusVisible));
+        private set => SetAndRaise(IsStatusVisibleProperty, ref _isStatusVisible, value);
     }
 
     public bool IsSenderVisible
     {
         get => _isSenderVisible;
-        private set => SetField(ref _isSenderVisible, value, nameof(IsSenderVisible));
+        private set => SetAndRaise(IsSenderVisibleProperty, ref _isSenderVisible, value);
     }
 
     public LatestQqMessageComponent()
@@ -82,7 +101,10 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        UpdateContent();
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            UpdateContent();
+        else
+            Avalonia.Threading.Dispatcher.UIThread.Post(UpdateContent);
     }
 
     private void UpdateContent()
@@ -106,10 +128,4 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
         IsSenderVisible = Settings.ShowSender && !string.IsNullOrWhiteSpace(SenderText);
     }
 
-    private void SetField<T>(ref T field, T value, string propertyName)
-    {
-        if (Equals(field, value)) return;
-        field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 }

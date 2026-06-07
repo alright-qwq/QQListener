@@ -8,7 +8,7 @@ using QQListener.Services;
 
 namespace QQListener.Automations.Actions;
 
-[ActionInfo("QQListener.ShowLatestMessage", "显示最后一条 QQ 消息", "\uE715", addDefaultToMenu: false)]
+[ActionInfo("QQListener.ShowLatestMessage", "显示最后一条 QQ 消息", "\uE02B", addDefaultToMenu: false)]
 public class ShowLatestMessageAction(
     LatestMessageState latestMessage,
     QqListenerSettings settings) : ActionBase

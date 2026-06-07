@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace QQListener.Models;
@@ -24,12 +25,22 @@ public partial class LatestMessageState : ObservableObject
 
     public void Update(string sender, string message, bool isImportant, bool isCalling)
     {
-        Sender = sender;
-        Message = message;
-        IsImportant = isImportant;
-        IsCalling = isCalling;
-        ReceivedAt = DateTimeOffset.Now;
-        HasMessage = true;
+        // Set backing fields directly to avoid intermediate PropertyChanged notifications,
+        // then fire all notifications at the end for an atomic UI update.
+#pragma warning disable MVVMTK0034
+        _sender = sender;
+        _message = message;
+        _isImportant = isImportant;
+        _isCalling = isCalling;
+        _receivedAt = DateTimeOffset.Now;
+        _hasMessage = true;
+#pragma warning restore MVVMTK0034
+        OnPropertyChanged(nameof(Sender));
+        OnPropertyChanged(nameof(Message));
+        OnPropertyChanged(nameof(IsImportant));
+        OnPropertyChanged(nameof(IsCalling));
+        OnPropertyChanged(nameof(ReceivedAt));
+        OnPropertyChanged(nameof(HasMessage));
     }
 
     public void Clear()

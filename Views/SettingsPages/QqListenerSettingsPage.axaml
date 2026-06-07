@@ -239,20 +239,44 @@
             </TextBlock>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE895;}"
-                                       Header="插件构建"
-                                       Description="{Binding Diagnostics.RuntimeSummary}" />
+                                       Header="运行环境"
+                                       Description="{Binding Diagnostics.RuntimeSummary}"
+                                       IsExpanded="False">
+                <controls:SettingsExpander.Items>
+                    <controls:SettingsExpanderItem IconSource="{ci:FluentIconSource Glyph=&#xE8B7;}"
+                                                   Content="插件目录">
+                        <controls:SettingsExpanderItem.Footer>
+                            <SelectableTextBlock Text="{Binding Diagnostics.PluginFolderPath}"
+                                                 FontSize="12"
+                                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                 MaxWidth="380"
+                                                 TextWrapping="Wrap" />
+                        </controls:SettingsExpanderItem.Footer>
+                    </controls:SettingsExpanderItem>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8B7;}"
-                                       Header="插件目录"
-                                       Description="{Binding Diagnostics.PluginFolderPath}" />
+                    <controls:SettingsExpanderItem IconSource="{ci:FluentIconSource Glyph=&#xE8A5;}"
+                                                   Content="当前 DLL">
+                        <controls:SettingsExpanderItem.Footer>
+                            <SelectableTextBlock Text="{Binding Diagnostics.AssemblyPath}"
+                                                 FontSize="12"
+                                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                 MaxWidth="380"
+                                                 TextWrapping="Wrap" />
+                        </controls:SettingsExpanderItem.Footer>
+                    </controls:SettingsExpanderItem>
 
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8A5;}"
-                                       Header="当前 DLL"
-                                       Description="{Binding Diagnostics.AssemblyPath}" />
-
-            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE713;}"
-                                       Header="配置文件"
-                                       Description="{Binding Diagnostics.SettingsPath}" />
+                    <controls:SettingsExpanderItem IconSource="{ci:FluentIconSource Glyph=&#xE713;}"
+                                                   Content="配置文件">
+                        <controls:SettingsExpanderItem.Footer>
+                            <SelectableTextBlock Text="{Binding Diagnostics.SettingsPath}"
+                                                 FontSize="12"
+                                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                 MaxWidth="380"
+                                                 TextWrapping="Wrap" />
+                        </controls:SettingsExpanderItem.Footer>
+                    </controls:SettingsExpanderItem>
+                </controls:SettingsExpander.Items>
+            </controls:SettingsExpander>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE9D9;}"
                                        Header="监听状态"

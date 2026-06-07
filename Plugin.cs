@@ -29,11 +29,16 @@ public class Plugin : PluginBase
         var diagnostics = new QqListenerDiagnosticsState();
         var assemblyPath = Assembly.GetExecutingAssembly().Location;
         diagnostics.RecordRuntimeInfo(
-            Info.Manifest.Version?.ToString() ?? "",
+            Info.Manifest.Version ?? "",
             Info.PluginFolderPath,
             settings.SettingsFilePath,
             assemblyPath,
             File.Exists(assemblyPath) ? File.GetLastWriteTime(assemblyPath) : null);
+
+        var pluginInfo = QqListenerPluginInfo.FromManifest(
+            Info.Manifest.Version ?? "",
+            Info.Manifest.Author ?? "",
+            Info.Manifest.Url);
 
         services.AddSingleton(settings);
         services.AddSingleton<WindowsNotificationReader>();
@@ -43,6 +48,7 @@ public class Plugin : PluginBase
         services.AddSingleton<ClassIslandMessageNotifier>();
         services.AddSingleton<LatestMessageState>();
         services.AddSingleton(diagnostics);
+        services.AddSingleton(pluginInfo);
 
         services.AddNotificationProvider<QqNotificationProvider>();
         services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();

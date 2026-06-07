@@ -132,6 +132,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 ? allSnapshots.Where(IsQqCandidateNotification)
                 : allSnapshots)
             .ToArray();
+        _diagnostics.RecordCandidateFilter(allSnapshots.Count, snapshots.Length, _settings.QqOnly);
 
         List<MessageEvent>? pendingMessages = null;
 

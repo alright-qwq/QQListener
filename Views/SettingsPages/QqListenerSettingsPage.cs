@@ -10,20 +10,36 @@ public partial class QqListenerSettingsPage : SettingsPageBase
 {
     private readonly QqListenerSettings _settings;
     private readonly QqListenerDiagnosticsState _diagnostics;
+    private readonly bool _autoSaveEnabled;
     private DispatcherTimer? _saveTimer;
 
     public QqListenerSettings Settings => _settings;
 
     public QqListenerDiagnosticsState Diagnostics => _diagnostics;
 
+    public QqListenerSettingsPage()
+        : this(new QqListenerSettings(), new QqListenerDiagnosticsState(), false)
+    {
+        _diagnostics.RecordRuntimeInfo("设计器", "未通过插件宿主加载", "", GetType().Assembly.Location, null);
+    }
+
     public QqListenerSettingsPage(QqListenerSettings settings, QqListenerDiagnosticsState diagnostics)
+        : this(settings, diagnostics, true)
+    {
+    }
+
+    private QqListenerSettingsPage(QqListenerSettings settings, QqListenerDiagnosticsState diagnostics, bool autoSaveEnabled)
     {
         _settings = settings;
         _diagnostics = diagnostics;
+        _autoSaveEnabled = autoSaveEnabled;
         DataContext = this;
         InitializeComponent();
 
-        _settings.PropertyChanged += OnSettingsPropertyChanged;
+        if (_autoSaveEnabled)
+        {
+            _settings.PropertyChanged += OnSettingsPropertyChanged;
+        }
     }
 
     private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -34,7 +50,10 @@ public partial class QqListenerSettingsPage : SettingsPageBase
     protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        if (_autoSaveEnabled)
+        {
+            _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        }
         if (_saveTimer != null)
         {
             _saveTimer.Stop();

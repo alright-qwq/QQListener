@@ -1,3 +1,4 @@
+using System.Reflection;
 using ClassIsland.Core.Abstractions;
 using ClassIsland.Core.Abstractions.Services;
 using ClassIsland.Core.Attributes;
@@ -21,6 +22,16 @@ public class Plugin : PluginBase
     {
         var settings = QqListenerSettings.Load(PluginConfigFolder);
         settings.Normalize();
+
+        var diagnostics = new QqListenerDiagnosticsState();
+        var assemblyPath = Assembly.GetExecutingAssembly().Location;
+        diagnostics.RecordRuntimeInfo(
+            Info.Manifest.Version?.ToString() ?? "",
+            Info.PluginFolderPath,
+            settings.SettingsFilePath,
+            assemblyPath,
+            File.Exists(assemblyPath) ? File.GetLastWriteTime(assemblyPath) : null);
+
         services.AddSingleton(settings);
         services.AddSingleton<WindowsNotificationReader>();
         services.AddSingleton<QqToastMessageParser>();
@@ -29,7 +40,7 @@ public class Plugin : PluginBase
         services.AddSingleton<ClassIslandMessageNotifier>();
         services.AddSingleton<QqMessageProcessor>();
         services.AddSingleton<LatestMessageState>();
-        services.AddSingleton<QqListenerDiagnosticsState>();
+        services.AddSingleton(diagnostics);
 
         services.AddNotificationProvider<QqNotificationProvider>();
         services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();

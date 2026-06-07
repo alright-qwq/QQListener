@@ -50,4 +50,22 @@
         </None>
     </ItemGroup>
 
+    <Target Name="SyncLocalClassIslandDebugPlugin" AfterTargets="Build"
+            Condition="'$(Configuration)' == 'Debug' and Exists('..\ClassIsland\ClassIsland.Desktop\bin\Debug\net8.0-windows10.0.19041.0')">
+        <PropertyGroup>
+            <LocalClassIslandPluginDir>..\ClassIsland\ClassIsland.Desktop\bin\Debug\net8.0-windows10.0.19041.0\Plugins\QQListener\</LocalClassIslandPluginDir>
+        </PropertyGroup>
+        <ItemGroup>
+            <LocalPluginFiles Include="$(TargetDir)*.*" />
+        </ItemGroup>
+        <MakeDir Directories="$(LocalClassIslandPluginDir)" />
+        <Copy SourceFiles="@(LocalPluginFiles)"
+              DestinationFolder="$(LocalClassIslandPluginDir)"
+              SkipUnchangedFiles="true"
+              Retries="0"
+              ContinueOnError="WarnAndContinue" />
+        <Message Importance="high"
+                 Text="Synced QQListener debug build to $(LocalClassIslandPluginDir)" />
+    </Target>
+
 </Project>

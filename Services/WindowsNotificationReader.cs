@@ -36,7 +36,7 @@ public sealed class WindowsNotificationReader(
                 .Select(ReadSnapshot)
                 .Where(x => x.Texts.Count > 0)
                 .ToArray();
-            diagnostics.RecordRead(snapshots.Length);
+            diagnostics.RecordRead(snapshots.Length, snapshots.Count(x => !x.IsAppIdentityAvailable));
             diagnostics.ClearError();
             return snapshots;
         }
@@ -93,11 +93,13 @@ public sealed class WindowsNotificationReader(
         catch (NotImplementedException ex)
         {
             LogUnavailableAppInfoOnce(ex);
+            diagnostics.RecordAppIdentityFallback("UserNotification.AppInfo 不可用，已使用 Toast 文本识别");
             return false;
         }
         catch (Exception ex)
         {
             logger.LogDebug(ex, "读取通知应用标识失败，已继续读取通知文本。");
+            diagnostics.RecordAppIdentityFallback($"读取 AppInfo 失败，已使用 Toast 文本识别: {ex.GetType().Name}");
             return false;
         }
     }

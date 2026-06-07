@@ -206,6 +206,22 @@
                 诊断状态
             </TextBlock>
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE895;}"
+                                       Header="插件构建"
+                                       Description="{Binding Diagnostics.RuntimeSummary}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8B7;}"
+                                       Header="插件目录"
+                                       Description="{Binding Diagnostics.PluginFolderPath}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8A5;}"
+                                       Header="当前 DLL"
+                                       Description="{Binding Diagnostics.AssemblyPath}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE713;}"
+                                       Header="配置文件"
+                                       Description="{Binding Diagnostics.SettingsPath}" />
+
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE9D9;}"
                                        Header="监听状态"
                                        Description="{Binding Diagnostics.ListenerState}" />
@@ -217,6 +233,14 @@
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE823;}"
                                        Header="最近读取"
                                        Description="{Binding Diagnostics.LastReadSummary}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8EF;}"
+                                       Header="AppInfo 状态"
+                                       Description="{Binding Diagnostics.AppIdentityStatus}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE71C;}"
+                                       Header="QQOnly 筛选"
+                                       Description="{Binding Diagnostics.LastCandidateSummary}" />
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE930;}"
                                        Header="最近接收"

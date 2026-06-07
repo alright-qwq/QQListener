@@ -15,6 +15,7 @@ riderModule.iml
 
 # Build artifacts
 cipx/
+.avalonia-build-tasks/
 *.md5sum
 generate-md5.ps1
 

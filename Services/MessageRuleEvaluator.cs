@@ -1,0 +1,81 @@
+using QQListener.Models;
+
+namespace QQListener.Services;
+
+public class MessageRuleEvaluator(QqListenerSettings settings)
+{
+    public MessageRuleEvaluationResult Evaluate(MessageEvent messageEvent)
+    {
+        var fullText = BuildSearchText(messageEvent);
+
+        var blacklist = settings.Blacklist.FirstOrDefault(x => Contains(fullText, x));
+        if (!string.IsNullOrWhiteSpace(blacklist))
+        {
+            return new MessageRuleEvaluationResult(
+                messageEvent with { Importance = MessageImportance.Ignored },
+                true,
+                $"命中黑名单: {blacklist}");
+        }
+
+        if (settings.CallingEnabled
+            && !string.IsNullOrWhiteSpace(settings.CallingKeyword)
+            && Contains(fullText, settings.CallingKeyword))
+        {
+            return new MessageRuleEvaluationResult(
+                messageEvent with { Importance = MessageImportance.Calling },
+                false,
+                $"命中呼叫关键词: {settings.CallingKeyword}");
+        }
+
+        var importantPerson = settings.ImportantPersons.FirstOrDefault(x => Contains(messageEvent.Sender, x));
+        if (!string.IsNullOrWhiteSpace(importantPerson))
+        {
+            return new MessageRuleEvaluationResult(
+                messageEvent with { Importance = MessageImportance.Important },
+                false,
+                $"命中重要人物: {importantPerson}");
+        }
+
+        var importantKeyword = settings.ImportantKeywords.FirstOrDefault(x => Contains(fullText, x));
+        if (!string.IsNullOrWhiteSpace(importantKeyword))
+        {
+            return new MessageRuleEvaluationResult(
+                messageEvent with { Importance = MessageImportance.Important },
+                false,
+                $"命中重要关键词: {importantKeyword}");
+        }
+
+        if (settings.SomeoneAtMe && Contains(fullText, "有人@我"))
+        {
+            return new MessageRuleEvaluationResult(
+                messageEvent with { Importance = MessageImportance.Important },
+                false,
+                "检测到有人@我");
+        }
+
+        return new MessageRuleEvaluationResult(
+            messageEvent with { Importance = MessageImportance.Normal },
+            false,
+            "未命中特殊规则");
+    }
+
+    private static string BuildSearchText(MessageEvent messageEvent)
+    {
+        return string.Join(Environment.NewLine, new[]
+            {
+                messageEvent.SourceDisplayName,
+                messageEvent.Sender,
+                messageEvent.Conversation,
+                messageEvent.Body,
+                messageEvent.FullText
+            }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+    }
+
+    private static bool Contains(string value, string keyword)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && !string.IsNullOrWhiteSpace(keyword)
+               && value.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+    }
+}

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using ClassIsland.Core.Abstractions.Services.NotificationProviders;
 using ClassIsland.Core.Attributes;
-using ClassIsland.Core.Models.Notification;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using QQListener.Models;
@@ -13,8 +12,11 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
 {
     private readonly QqListenerSettings _settings;
     private readonly WindowsNotificationReader _reader;
-    private readonly QqMessageProcessor _processor;
+    private readonly QqToastMessageParser _parser;
+    private readonly MessageEventPipeline _pipeline;
+    private readonly ClassIslandMessageNotifier _notifier;
     private readonly LatestMessageState _latestMessage;
+    private readonly QqListenerDiagnosticsState _diagnostics;
     private readonly ILogger<QqNotificationProvider> _logger;
     private readonly Dictionary<uint, int> _knownNotificationKeys = new();
     private volatile bool _hasInitializedNotifications;
@@ -24,14 +26,20 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     public QqNotificationProvider(
         QqListenerSettings settings,
         WindowsNotificationReader reader,
-        QqMessageProcessor processor,
+        QqToastMessageParser parser,
+        MessageEventPipeline pipeline,
+        ClassIslandMessageNotifier notifier,
         LatestMessageState latestMessage,
+        QqListenerDiagnosticsState diagnostics,
         ILogger<QqNotificationProvider> logger)
     {
         _settings = settings;
         _reader = reader;
-        _processor = processor;
+        _parser = parser;
+        _pipeline = pipeline;
+        _notifier = notifier;
         _latestMessage = latestMessage;
+        _diagnostics = diagnostics;
         _logger = logger;
         _settings.PropertyChanged += OnSettingsPropertyChanged;
     }
@@ -42,6 +50,11 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         {
             ResetDetectionState();
         }
+
+        if (e.PropertyName == nameof(QqListenerSettings.IsEnabled))
+        {
+            _diagnostics.MarkEnabledChanged(_settings.IsEnabled);
+        }
     }
 
     private void ResetDetectionState()
@@ -49,7 +62,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         lock (_pollLock)
         {
             _knownNotificationKeys.Clear();
-            _processor.ClearState();
+            _pipeline.ClearState();
             _hasInitializedNotifications = false;
         }
     }
@@ -58,6 +71,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     {
         _logger.LogInformation("QQListener 监听已启动（扫描间隔 {Interval}s，QQOnly={QqOnly}）",
             _settings.ScanIntervalSeconds, _settings.QqOnly);
+        _diagnostics.MarkStarted(_settings.IsEnabled);
 
         _listenerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _ = Task.Run(() => ListenAsync(_listenerCts.Token), CancellationToken.None);
@@ -80,6 +94,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         }
 
         _logger.LogInformation("QQListener 监听已停止。");
+        _diagnostics.MarkStopped();
     }
 
     private async Task ListenAsync(CancellationToken cancellationToken)
@@ -97,6 +112,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "QQ 通知监听轮询失败。");
+                _diagnostics.RecordError(ex, "监听轮询失败");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(_settings.ScanIntervalSeconds), cancellationToken);
@@ -107,17 +123,17 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     {
         if (!_settings.IsEnabled)
         {
+            _diagnostics.MarkEnabledChanged(false);
             return;
         }
 
         var allSnapshots = await _reader.ReadToastNotificationsAsync();
-        if (allSnapshots == null) return;
         var snapshots = (_settings.QqOnly
                 ? allSnapshots.Where(IsQqCandidateNotification)
                 : allSnapshots)
             .ToArray();
 
-        List<QqNotificationMessage>? pendingMessages = null;
+        List<MessageEvent>? pendingMessages = null;
 
         lock (_pollLock)
         {
@@ -127,8 +143,9 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 {
                     _knownNotificationKeys[snapshot.Id] = GetSnapshotKey(snapshot);
                 }
-                _processor.UpdateActiveToasts(snapshots.Select(x => x.Texts));
+                _pipeline.UpdateActiveEvents(ParseVisibleEvents(snapshots));
                 _hasInitializedNotifications = true;
+                _diagnostics.RecordIgnored($"初始化完成，已忽略 {snapshots.Length} 条现有通知");
                 _logger.LogInformation("QQListener 初始化完成，已忽略 {Count} 条现有 QQ 通知。", snapshots.Length);
                 return;
             }
@@ -148,16 +165,25 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                     continue;
                 }
 
-                var message = _processor.Process(snapshot.Texts);
-                if (message != null)
+                if (!_parser.TryParse(snapshot.Texts, DateTimeOffset.Now, out var messageEvent, out var parseReason)
+                    || messageEvent == null)
                 {
-                    _logger.LogInformation("收到 {Type}消息: {Sender} {MessagePreview}",
-                        message.Calling ? "呼叫" : message.Important ? "重要" : "普通",
-                        message.Sender,
-                        Truncate(message.Message, 30));
+                    _diagnostics.RecordIgnored(parseReason);
+                    _logger.LogDebug("跳过无法解析的通知: {Reason}", parseReason);
+                    continue;
+                }
 
-                    pendingMessages ??= new List<QqNotificationMessage>();
-                    pendingMessages.Add(message);
+                var result = _pipeline.Process(messageEvent);
+                if (result.Accepted && result.Event != null)
+                {
+                    _logger.LogInformation("收到 {Type}消息: {Sender} {MessagePreview} Reason={Reason}",
+                        FormatImportance(result.Event.Importance),
+                        result.Event.Sender,
+                        Truncate(result.Event.Body, 30),
+                        result.Reason);
+
+                    pendingMessages ??= new List<MessageEvent>();
+                    pendingMessages.Add(result.Event);
                 }
             }
 
@@ -166,7 +192,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             {
                 _knownNotificationKeys.Remove(id);
             }
-            _processor.UpdateActiveToasts(snapshots.Select(x => x.Texts));
+            _pipeline.UpdateActiveEvents(ParseVisibleEvents(snapshots));
         }
 
         // Dispatch UI updates outside the lock to avoid potential deadlocks
@@ -175,60 +201,27 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         {
             foreach (var message in pendingMessages)
             {
-                _latestMessage.Update(message.Sender, message.Message, message.Important, message.Calling);
+                _latestMessage.Update(message);
                 ShowQqNotification(message);
             }
         }
     }
 
-    public void ShowQqNotification(QqNotificationMessage message)
+    private IEnumerable<MessageEvent> ParseVisibleEvents(IEnumerable<WindowsToastSnapshot> snapshots)
     {
-        var title = message.Calling ? "QQ 呼叫" : message.Important ? "重要 QQ 消息" : "QQ 消息";
-        var body = string.IsNullOrWhiteSpace(message.Message)
-            ? message.Sender
-            : $"{message.Sender}{Environment.NewLine}{message.Message}";
-
-        void DoShow()
+        foreach (var snapshot in snapshots)
         {
-            NotificationContent overlay;
-
-            if (_settings.RollingSpeed <= 0)
+            if (_parser.TryParse(snapshot.Texts, DateTimeOffset.Now, out var messageEvent, out _)
+                && messageEvent != null)
             {
-                overlay = NotificationContent.CreateSimpleTextContent(body, content =>
-                {
-                    content.Duration = message.Duration;
-                    content.SpeechContent = body;
-                });
+                yield return messageEvent;
             }
-            else
-            {
-                var rollingDuration = TimeSpan.FromMilliseconds(message.Duration.TotalMilliseconds / Math.Max(0.01, _settings.RollingSpeed));
-                overlay = NotificationContent.CreateRollingTextContent(body, rollingDuration, message.Calling ? 10 : 2);
-            }
-
-            ShowNotification(new NotificationRequest
-            {
-                MaskContent = NotificationContent.CreateTwoIconsMask(title, rightIcon: "\uE02B", factory: content =>
-                {
-                    content.Duration = TimeSpan.FromSeconds(2);
-                    content.SpeechContent = title;
-                }),
-                OverlayContent = overlay,
-                RequestNotificationSettings =
-                {
-                    IsSettingsEnabled = true,
-                    IsSpeechEnabled = true,
-                    IsNotificationEffectEnabled = true,
-                    IsNotificationSoundEnabled = true,
-                    IsNotificationTopmostEnabled = message.Calling
-                }
-            });
         }
+    }
 
-        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-            DoShow();
-        else
-            Avalonia.Threading.Dispatcher.UIThread.Post(DoShow);
+    public void ShowQqNotification(MessageEvent message)
+    {
+        _notifier.Show(message, ShowNotification);
     }
 
     private static int GetSnapshotKey(WindowsToastSnapshot snapshot)
@@ -287,6 +280,18 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     private static string Truncate(string value, int maxLength)
     {
         if (string.IsNullOrEmpty(value) || value.Length <= maxLength) return value ?? "";
-        return value[..maxLength] + "…";
+        return value[..maxLength] + "...";
+    }
+
+    private static string FormatImportance(MessageImportance importance)
+    {
+        return importance switch
+        {
+            MessageImportance.Calling => "呼叫",
+            MessageImportance.Important => "重要",
+            MessageImportance.Normal => "普通",
+            MessageImportance.Ignored => "忽略",
+            _ => importance.ToString()
+        };
     }
 }

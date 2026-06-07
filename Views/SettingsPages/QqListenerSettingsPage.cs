@@ -9,13 +9,17 @@ namespace QQListener.Views.SettingsPages;
 public partial class QqListenerSettingsPage : SettingsPageBase
 {
     private readonly QqListenerSettings _settings;
+    private readonly QqListenerDiagnosticsState _diagnostics;
     private DispatcherTimer? _saveTimer;
 
     public QqListenerSettings Settings => _settings;
 
-    public QqListenerSettingsPage(QqListenerSettings settings)
+    public QqListenerDiagnosticsState Diagnostics => _diagnostics;
+
+    public QqListenerSettingsPage(QqListenerSettings settings, QqListenerDiagnosticsState diagnostics)
     {
         _settings = settings;
+        _diagnostics = diagnostics;
         DataContext = this;
         InitializeComponent();
 

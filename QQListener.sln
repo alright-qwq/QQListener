@@ -2,6 +2,10 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQListener", "QQListener.csproj", "{F7D0334D-583B-40D0-A354-B0B57C084AB3}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{5D20AA90-6969-D8BD-9DCD-8634F4692FDA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QQListener.SampleVerifier", "Samples\QQListener.SampleVerifier\QQListener.SampleVerifier.csproj", "{C10B64B5-5439-4869-9A18-DB0144DD938E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +16,15 @@ Global
 		{F7D0334D-583B-40D0-A354-B0B57C084AB3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F7D0334D-583B-40D0-A354-B0B57C084AB3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F7D0334D-583B-40D0-A354-B0B57C084AB3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C10B64B5-5439-4869-9A18-DB0144DD938E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C10B64B5-5439-4869-9A18-DB0144DD938E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C10B64B5-5439-4869-9A18-DB0144DD938E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C10B64B5-5439-4869-9A18-DB0144DD938E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C10B64B5-5439-4869-9A18-DB0144DD938E} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

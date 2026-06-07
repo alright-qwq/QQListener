@@ -14,16 +14,22 @@
     <ItemGroup>
         <Compile Remove="doc\**\*.cs" />
         <Compile Remove="参考\**\*.cs" />
+        <Compile Remove="Samples\**\*.cs" />
         <AvaloniaResource Remove="doc\**\*" />
         <AvaloniaResource Remove="参考\**\*" />
+        <AvaloniaResource Remove="Samples\**\*" />
         <AvaloniaXaml Remove="doc\**\*" />
         <AvaloniaXaml Remove="参考\**\*" />
+        <AvaloniaXaml Remove="Samples\**\*" />
         <Content Remove="doc\**\*" />
         <Content Remove="参考\**\*" />
+        <Content Remove="Samples\**\*" />
         <EmbeddedResource Remove="doc\**\*" />
         <EmbeddedResource Remove="参考\**\*" />
+        <EmbeddedResource Remove="Samples\**\*" />
         <None Remove="doc\**\*" />
         <None Remove="参考\**\*" />
+        <None Remove="Samples\**\*" />
     </ItemGroup>
 
     <ItemGroup>

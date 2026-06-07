@@ -198,6 +198,38 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
+            <!-- 诊断状态 -->
+            <TextBlock FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                       Margin="0,20,0,0">
+                诊断状态
+            </TextBlock>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE9D9;}"
+                                       Header="监听状态"
+                                       Description="{Binding Diagnostics.ListenerState}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8D7;}"
+                                       Header="通知权限"
+                                       Description="{Binding Diagnostics.PermissionStatus}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE823;}"
+                                       Header="最近读取"
+                                       Description="{Binding Diagnostics.LastReadSummary}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE930;}"
+                                       Header="最近接收"
+                                       Description="{Binding Diagnostics.LastAcceptedSummary}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE711;}"
+                                       Header="最近忽略"
+                                       Description="{Binding Diagnostics.LastIgnoredReason}" />
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xEB90;}"
+                                       Header="最近错误"
+                                       Description="{Binding Diagnostics.LastErrorSummary}" />
+
         </StackPanel>
     </ScrollViewer>
 </ci:SettingsPageBase>

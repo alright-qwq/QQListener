@@ -5,4 +5,13 @@ public sealed record QqNotificationMessage(
     string Message,
     bool Important,
     bool Calling,
-    TimeSpan Duration);
+    TimeSpan Duration)
+{
+    public static QqNotificationMessage FromMessageEvent(MessageEvent messageEvent, TimeSpan duration) =>
+        new(
+            messageEvent.Sender,
+            messageEvent.Body,
+            messageEvent.IsImportant,
+            messageEvent.IsCalling,
+            duration);
+}

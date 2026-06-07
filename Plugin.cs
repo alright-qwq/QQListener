@@ -23,8 +23,13 @@ public class Plugin : PluginBase
         settings.Normalize();
         services.AddSingleton(settings);
         services.AddSingleton<WindowsNotificationReader>();
+        services.AddSingleton<QqToastMessageParser>();
+        services.AddSingleton<MessageRuleEvaluator>();
+        services.AddSingleton<MessageEventPipeline>();
+        services.AddSingleton<ClassIslandMessageNotifier>();
         services.AddSingleton<QqMessageProcessor>();
         services.AddSingleton<LatestMessageState>();
+        services.AddSingleton<QqListenerDiagnosticsState>();
 
         services.AddNotificationProvider<QqNotificationProvider>();
         services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();

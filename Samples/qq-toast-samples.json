@@ -1,0 +1,202 @@
+[
+  {
+    "name": "direct-chinese-colon",
+    "texts": ["QQ", "Alice：今晚交作业"],
+    "sender": "Alice",
+    "conversation": "",
+    "body": "今晚交作业",
+    "importance": "Important",
+    "ignored": false
+  },
+  {
+    "name": "direct-ascii-colon",
+    "texts": ["Bob: 明天带实验报告"],
+    "sender": "Bob",
+    "conversation": "",
+    "body": "明天带实验报告",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "group-two-lines",
+    "texts": ["高一 1 班群", "Carol：通知明早升旗"],
+    "sender": "Carol",
+    "conversation": "高一 1 班群",
+    "body": "通知明早升旗",
+    "importance": "Important",
+    "ignored": false
+  },
+  {
+    "name": "group-three-lines",
+    "texts": ["学习小组", "Dave", "今晚 8 点讨论"],
+    "sender": "Dave",
+    "conversation": "学习小组",
+    "body": "今晚 8 点讨论",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "mention-line",
+    "texts": ["班级群", "有人@我", "Eve：看群公告"],
+    "sender": "Eve",
+    "conversation": "班级群",
+    "body": "有人@我\n看群公告",
+    "importance": "Important",
+    "ignored": false
+  },
+  {
+    "name": "calling-keyword",
+    "texts": ["Frank：呼叫值日生"],
+    "sender": "Frank",
+    "conversation": "",
+    "body": "呼叫值日生",
+    "importance": "Calling",
+    "ignored": false
+  },
+  {
+    "name": "blacklist-ad",
+    "texts": ["Mall：限时抽奖广告"],
+    "sender": "Mall",
+    "conversation": "",
+    "body": "限时抽奖广告",
+    "importance": "Ignored",
+    "ignored": true
+  },
+  {
+    "name": "important-person",
+    "texts": ["班主任：请马上回办公室"],
+    "sender": "班主任",
+    "conversation": "",
+    "body": "请马上回办公室",
+    "importance": "Important",
+    "ignored": false
+  },
+  {
+    "name": "important-keyword-exam",
+    "texts": ["教务处：考试安排已发布"],
+    "sender": "教务处",
+    "conversation": "",
+    "body": "考试安排已发布",
+    "importance": "Important",
+    "ignored": false
+  },
+  {
+    "name": "single-body-only",
+    "texts": ["系统消息"],
+    "sender": "QQ",
+    "conversation": "",
+    "body": "系统消息",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "group-no-sender-split",
+    "texts": ["社团群", "今晚活动暂停"],
+    "sender": "社团群",
+    "conversation": "",
+    "body": "今晚活动暂停",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "group-middle-lines",
+    "texts": ["竞赛群", "Grace", "第一行", "第二行"],
+    "sender": "Grace",
+    "conversation": "竞赛群",
+    "body": "第一行\n第二行",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "duplicate-a",
+    "texts": ["Henry：重复消息"],
+    "sender": "Henry",
+    "conversation": "",
+    "body": "重复消息",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "duplicate-b",
+    "texts": ["Henry：重复消息"],
+    "sender": "Henry",
+    "conversation": "",
+    "body": "重复消息",
+    "importance": "Normal",
+    "ignored": true,
+    "ignoreReasonContains": "去重"
+  },
+  {
+    "name": "malformed-empty-lines",
+    "texts": [" ", "QQ", "\t"],
+    "sender": "",
+    "conversation": "",
+    "body": "",
+    "importance": "Ignored",
+    "ignored": true,
+    "parseShouldFail": true
+  },
+  {
+    "name": "tim-source-shape",
+    "texts": ["TIM", "Ivy：TIM 消息"],
+    "sender": "Ivy",
+    "conversation": "",
+    "body": "TIM 消息",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "full-width-extra-colon",
+    "texts": ["Jack：消息包含：冒号"],
+    "sender": "Jack",
+    "conversation": "",
+    "body": "消息包含：冒号",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "ascii-compact-colon",
+    "texts": ["Kate:紧凑冒号"],
+    "sender": "Kate",
+    "conversation": "",
+    "body": "紧凑冒号",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "conversation-prefix-single-line",
+    "texts": ["家长群 Leo：请确认回执"],
+    "sender": "Leo",
+    "conversation": "家长群",
+    "body": "请确认回执",
+    "importance": "Normal",
+    "ignored": false
+  },
+  {
+    "name": "blacklist-over-calling",
+    "texts": ["Spam：呼叫 抽奖"],
+    "sender": "Spam",
+    "conversation": "",
+    "body": "呼叫 抽奖",
+    "importance": "Ignored",
+    "ignored": true
+  },
+  {
+    "name": "case-insensitive-keyword",
+    "texts": ["Mia：NOTICE tomorrow"],
+    "sender": "Mia",
+    "conversation": "",
+    "body": "NOTICE tomorrow",
+    "importance": "Important",
+    "ignored": false
+  },
+  {
+    "name": "multi-space-normalization",
+    "texts": ["Nina：   多个    空格"],
+    "sender": "Nina",
+    "conversation": "",
+    "body": "多个 空格",
+    "importance": "Normal",
+    "ignored": false
+  }
+]

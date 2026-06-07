@@ -1,10 +1,13 @@
 using Microsoft.Extensions.Logging;
+using QQListener.Models;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
 namespace QQListener.Services;
 
-public sealed class WindowsNotificationReader(ILogger<WindowsNotificationReader> logger)
+public sealed class WindowsNotificationReader(
+    QqListenerDiagnosticsState diagnostics,
+    ILogger<WindowsNotificationReader> logger)
 {
     private UserNotificationListenerAccessStatus _accessStatus = UserNotificationListenerAccessStatus.Unspecified;
 
@@ -15,6 +18,7 @@ public sealed class WindowsNotificationReader(ILogger<WindowsNotificationReader>
         {
             logger.LogInformation("正在请求通知监听权限...");
             _accessStatus = await listener.RequestAccessAsync();
+            diagnostics.RecordPermission(_accessStatus.ToString());
             if (_accessStatus != UserNotificationListenerAccessStatus.Allowed)
             {
                 logger.LogWarning("通知监听权限被拒绝（状态={Status}），无法读取通知。", _accessStatus);
@@ -27,15 +31,20 @@ public sealed class WindowsNotificationReader(ILogger<WindowsNotificationReader>
         try
         {
             var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
-            return notifications
+            var snapshots = notifications
                 .Select(ReadSnapshot)
                 .Where(x => x.Texts.Count > 0)
                 .ToArray();
+            diagnostics.RecordRead(snapshots.Length);
+            diagnostics.ClearError();
+            return snapshots;
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "读取通知失败，将在下次轮询时重新请求权限。");
+            diagnostics.RecordError(ex, "读取通知失败");
             _accessStatus = UserNotificationListenerAccessStatus.Unspecified;
+            diagnostics.RecordPermission(_accessStatus.ToString());
             return [];
         }
     }

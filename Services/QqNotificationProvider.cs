@@ -59,7 +59,11 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         }
     }
 
-    private void ResetDetectionState()
+    /// <summary>
+    /// 清空去重 / 冷却 / 已记忆通知集合，并把"初始化完成"标志重置。
+    /// 既被 IsEnabled 切回 true 时复用，也被设置页的"重置去重"按钮直接调用。
+    /// </summary>
+    public void ResetDetectionState()
     {
         lock (_pollLock)
         {
@@ -205,6 +209,18 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 ShowQqNotification(message);
             }
         }
+    }
+
+    /// <summary>
+    /// 让外部（设置页"手动扫一次"按钮）排队执行一次轮询。
+    /// 不绕开 _pollLock —— 直接 await PollOnceAsync()，靠它自己内部的锁与后台轮询串行化。
+    /// IsEnabled=false 时 PollOnceAsync 自身会 early-return，这里不做重复判断。
+    /// </summary>
+    public Task PollOnceManuallyAsync()
+    {
+        // 若 listener 还没启动（StartAsync 没跑），后台 token 为空，照样能跑：
+        // PollOnceAsync 是无参数的私有方法，不依赖 cancellationToken。
+        return PollOnceAsync();
     }
 
     private IEnumerable<MessageEvent> ParseVisibleEvents(IEnumerable<WindowsToastSnapshot> snapshots)

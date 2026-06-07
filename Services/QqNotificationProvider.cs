@@ -240,8 +240,8 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     {
         if (IsQqNotification(snapshot)) return true;
         if (LooksLikeQqMessage(snapshot.Texts)) return true;
-        if (string.IsNullOrWhiteSpace(snapshot.AppName) && string.IsNullOrWhiteSpace(snapshot.AppId))
-            return LooksLikeQqMessageContent(snapshot.Texts);
+        if (HasUnknownAppIdentity(snapshot))
+            return QqToastMessageParser.LooksLikeQqToastShape(snapshot.Texts);
         return false;
     }
 
@@ -266,15 +266,16 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         return fullText.Contains("QQ", StringComparison.OrdinalIgnoreCase)
                || fullText.Contains("TIM", StringComparison.OrdinalIgnoreCase)
                || fullText.Contains("有人@我", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("群聊", StringComparison.OrdinalIgnoreCase);
+               || fullText.Contains("群聊", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("[图片]", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("[表情]", StringComparison.OrdinalIgnoreCase)
+               || fullText.Contains("[语音]", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool LooksLikeQqMessageContent(IReadOnlyList<string> texts)
+    private static bool HasUnknownAppIdentity(WindowsToastSnapshot snapshot)
     {
-        if (texts.Count == 0) return false;
-        var fullText = string.Join('\n', texts);
-        return fullText.Contains("有人@我", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("群聊", StringComparison.OrdinalIgnoreCase);
+        return !snapshot.IsAppIdentityAvailable
+               || (string.IsNullOrWhiteSpace(snapshot.AppName) && string.IsNullOrWhiteSpace(snapshot.AppId));
     }
 
     private static string Truncate(string value, int maxLength)

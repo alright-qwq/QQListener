@@ -10,6 +10,7 @@ public sealed class WindowsNotificationReader(
     ILogger<WindowsNotificationReader> logger)
 {
     private UserNotificationListenerAccessStatus _accessStatus = UserNotificationListenerAccessStatus.Unspecified;
+    private volatile bool _hasLoggedUnavailableAppInfo;
 
     public async Task<IReadOnlyList<WindowsToastSnapshot>> ReadToastNotificationsAsync()
     {
@@ -52,20 +53,7 @@ public sealed class WindowsNotificationReader(
     private WindowsToastSnapshot ReadSnapshot(UserNotification notification)
     {
         var texts = new List<string>();
-        var appName = "";
-        var appId = "";
-
-        try
-        {
-            appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? "";
-            appId = notification.AppInfo?.AppUserModelId ?? "";
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "读取通知应用名称失败。");
-            appName = "";
-            appId = "";
-        }
+        var isAppIdentityAvailable = ReadAppIdentity(notification, out var appName, out var appId);
 
         try
         {
@@ -84,11 +72,48 @@ public sealed class WindowsNotificationReader(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "读取通知文本内容失败。");
-            return new WindowsToastSnapshot(notification.Id, appName, appId, []);
+            return new WindowsToastSnapshot(notification.Id, appName, appId, isAppIdentityAvailable, []);
         }
 
-        return new WindowsToastSnapshot(notification.Id, appName, appId, texts.ToArray());
+        return new WindowsToastSnapshot(notification.Id, appName, appId, isAppIdentityAvailable, texts.ToArray());
+    }
+
+    private bool ReadAppIdentity(UserNotification notification, out string appName, out string appId)
+    {
+        appName = "";
+        appId = "";
+
+        try
+        {
+            var appInfo = notification.AppInfo;
+            appName = appInfo?.DisplayInfo?.DisplayName ?? "";
+            appId = appInfo?.AppUserModelId ?? "";
+            return true;
+        }
+        catch (NotImplementedException ex)
+        {
+            LogUnavailableAppInfoOnce(ex);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "读取通知应用标识失败，已继续读取通知文本。");
+            return false;
+        }
+    }
+
+    private void LogUnavailableAppInfoOnce(Exception exception)
+    {
+        if (_hasLoggedUnavailableAppInfo) return;
+
+        _hasLoggedUnavailableAppInfo = true;
+        logger.LogDebug(exception, "当前运行环境不支持读取 UserNotification.AppInfo，已降级为仅使用通知文本识别。");
     }
 }
 
-public sealed record WindowsToastSnapshot(uint Id, string AppName, string AppId, IReadOnlyList<string> Texts);
+public sealed record WindowsToastSnapshot(
+    uint Id,
+    string AppName,
+    string AppId,
+    bool IsAppIdentityAvailable,
+    IReadOnlyList<string> Texts);

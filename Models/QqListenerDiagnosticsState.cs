@@ -117,7 +117,7 @@ public partial class QqListenerDiagnosticsState : ObservableObject
 
     public void RecordAccepted(MessageEvent messageEvent, string reason)
     {
-        LastAcceptedSummary = $"{messageEvent.ReceivedAt:HH:mm:ss} {FormatImportance(messageEvent.Importance)} {messageEvent.Sender}: {Truncate(messageEvent.Body, 40)}（{reason}）";
+        LastAcceptedSummary = $"{messageEvent.ReceivedAt:HH:mm:ss} {FormatImportance(messageEvent.Importance)} {messageEvent.DisplaySender}: {Truncate(messageEvent.Body, 40)}（{reason}）";
         LastIgnoredReason = "暂无";
     }
 

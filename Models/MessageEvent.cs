@@ -25,7 +25,20 @@ public sealed record MessageEvent(
             ? $"重要 {SourceDisplayName} 消息"
             : $"{SourceDisplayName} 消息";
 
-    public string DisplayBody => string.IsNullOrWhiteSpace(Body)
+    public string DisplaySender => string.IsNullOrWhiteSpace(Conversation)
         ? Sender
-        : $"{Sender}{Environment.NewLine}{Body}";
+        : string.IsNullOrWhiteSpace(Sender)
+            ? Conversation
+            : $"{Conversation} / {Sender}";
+
+    public string DisplayBody
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Body)) return DisplaySender;
+            return string.IsNullOrWhiteSpace(DisplaySender)
+                ? Body
+                : $"{DisplaySender}{Environment.NewLine}{Body}";
+        }
+    }
 }

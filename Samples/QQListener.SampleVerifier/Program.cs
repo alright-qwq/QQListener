@@ -65,6 +65,11 @@ foreach (var sample in samples)
     Check(sample, "sender", sample.Sender, actualEvent.Sender);
     Check(sample, "conversation", sample.Conversation, actualEvent.Conversation);
     Check(sample, "body", NormalizeNewLines(sample.Body), NormalizeNewLines(actualEvent.Body));
+    if (!string.IsNullOrWhiteSpace(sample.Conversation)
+        && !actualEvent.DisplayBody.Contains(sample.Conversation, StringComparison.Ordinal))
+    {
+        failures.Add($"{sample.Name}: display body should contain conversation '{sample.Conversation}', got '{actualEvent.DisplayBody}'.");
+    }
 
     if (result.Accepted == sample.Ignored)
     {

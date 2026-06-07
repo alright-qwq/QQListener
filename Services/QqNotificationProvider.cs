@@ -179,7 +179,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 {
                     _logger.LogInformation("收到 {Type}消息: {Sender} {MessagePreview} Reason={Reason}",
                         FormatImportance(result.Event.Importance),
-                        result.Event.Sender,
+                        result.Event.DisplaySender,
                         Truncate(result.Event.Body, 30),
                         result.Reason);
 

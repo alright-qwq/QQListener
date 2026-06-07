@@ -24,7 +24,39 @@
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}">
                         监听 QQ 通知并转发为 ClassIsland 提醒
                     </TextBlock>
+                    <TextBlock FontSize="12"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Text="{Binding PluginInfo.HeaderLine}" />
                 </StackPanel>
+            </StackPanel>
+
+            <!-- 快捷操作 -->
+            <TextBlock FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                       Margin="0,12,0,0">
+                快捷操作
+            </TextBlock>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,4">
+                <Button Click="OnPollNowClick" IsEnabled="{Binding CanPoll}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ci:FluentIcon Glyph="&#xE72C;" />
+                        <TextBlock Text="手动扫一次" />
+                    </StackPanel>
+                </Button>
+                <Button Click="OnResetClick" IsEnabled="{Binding ProviderAvailable}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ci:FluentIcon Glyph="&#xE71D;" />
+                        <TextBlock Text="重置去重" />
+                    </StackPanel>
+                </Button>
+                <Button Click="OnReplayLatestClick" IsEnabled="{Binding CanReplay}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <ci:FluentIcon Glyph="&#xE0A5;" />
+                        <TextBlock Text="重示最后一条" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <!-- 基础设置 -->

@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Security.Cryptography;
+using System.Text;
 using ClassIsland.Core.Abstractions.Services.NotificationProviders;
 using ClassIsland.Core.Attributes;
 using Microsoft.Extensions.Hosting;
@@ -18,7 +20,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
     private readonly LatestMessageState _latestMessage;
     private readonly QqListenerDiagnosticsState _diagnostics;
     private readonly ILogger<QqNotificationProvider> _logger;
-    private readonly Dictionary<uint, int> _knownNotificationKeys = new();
+    private readonly Dictionary<uint, string> _knownNotificationKeys = new();
     private volatile bool _hasInitializedNotifications;
     private CancellationTokenSource? _listenerCts;
     private readonly object _pollLock = new();
@@ -69,7 +71,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
 
     Task IHostedService.StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("QQListener 监听已启动（扫描间隔 {Interval}s，QQOnly={QqOnly}）",
+        _logger.LogInformation("QQListener 监听已启动（扫描间隔 {Interval}s，QqOnly={QqOnly}）",
             _settings.ScanIntervalSeconds, _settings.QqOnly);
         _diagnostics.MarkStarted(_settings.IsEnabled);
 
@@ -160,12 +162,6 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 _logger.LogDebug("新通知或通知内容变化 [{AppName}] AppId={AppId} Id={Id} Texts={Count}条",
                     snapshot.AppName, snapshot.AppId, snapshot.Id, snapshot.Texts.Count);
 
-                if (_settings.QqOnly && !IsQqCandidateNotification(snapshot))
-                {
-                    _logger.LogDebug("跳过非 QQ 通知 [{AppName}]", snapshot.AppName);
-                    continue;
-                }
-
                 if (!_parser.TryParse(snapshot.Texts, DateTimeOffset.Now, out var messageEvent, out var parseReason)
                     || messageEvent == null)
                 {
@@ -188,7 +184,10 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                 }
             }
 
-            var visibleIds = snapshots.Select(x => x.Id).ToHashSet();
+            // 用 allSnapshots（不是过滤后的 snapshots）计算 visibleIds：
+            // 一条仍在通知中心、但本轮被 QqOnly 误判为非 QQ 的通知，如果用过滤后的集合
+            // 来"打扫" _knownNotificationKeys，下一轮它又会被当成全新通知重复处理。
+            var visibleIds = allSnapshots.Select(x => x.Id).ToHashSet();
             foreach (var id in _knownNotificationKeys.Keys.Where(x => !visibleIds.Contains(x)).ToArray())
             {
                 _knownNotificationKeys.Remove(id);
@@ -225,22 +224,28 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         _notifier.Show(message, ShowNotification);
     }
 
-    private static int GetSnapshotKey(WindowsToastSnapshot snapshot)
+    private static string GetSnapshotKey(WindowsToastSnapshot snapshot)
     {
-        var hash = new HashCode();
-        hash.Add(snapshot.AppName, StringComparer.OrdinalIgnoreCase);
-        hash.Add(snapshot.AppId, StringComparer.OrdinalIgnoreCase);
+        // 用稳定的字符串指纹做相等键：原先的 int HashCode 只有 32 位，作为相等判断
+        // 在通知历史累计达数万条时存在碰撞风险，会让新消息被静默吞掉。
+        var builder = new StringBuilder();
+        builder.Append(snapshot.AppName?.ToLowerInvariant() ?? "");
+        builder.Append('\u001f');
+        builder.Append(snapshot.AppId?.ToLowerInvariant() ?? "");
         foreach (var text in snapshot.Texts)
         {
-            hash.Add(text);
+            builder.Append('\u001f');
+            builder.Append(text);
         }
-        return hash.ToHashCode();
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+        return Convert.ToHexString(bytes);
     }
 
     private static bool IsQqCandidateNotification(WindowsToastSnapshot snapshot)
     {
         if (IsQqNotification(snapshot)) return true;
-        if (LooksLikeQqMessage(snapshot.Texts)) return true;
+        // 只在 AppInfo 不可用时才信赖文本形状识别；否则非 QQ 应用通知里出现的
+        // "[图片]"、"QQ"（域名、文件名、新闻标题里都可能含）会被误识为 QQ 消息。
         if (HasUnknownAppIdentity(snapshot))
             return QqToastMessageParser.LooksLikeQqToastShape(snapshot.Texts);
         return false;
@@ -258,19 +263,6 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
                || value.Contains("Tim", StringComparison.OrdinalIgnoreCase)
                || value.Contains("Tencent", StringComparison.OrdinalIgnoreCase)
                || value.Contains("com.tencent", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool LooksLikeQqMessage(IReadOnlyList<string> texts)
-    {
-        if (texts.Count == 0) return false;
-        var fullText = string.Join('\n', texts);
-        return fullText.Contains("QQ", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("TIM", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("有人@我", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("群聊", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("[图片]", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("[表情]", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("[语音]", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasUnknownAppIdentity(WindowsToastSnapshot snapshot)

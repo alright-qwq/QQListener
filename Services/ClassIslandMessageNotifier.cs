@@ -33,7 +33,8 @@ public class ClassIslandMessageNotifier(QqListenerSettings settings)
         }
         else
         {
-            var rollingDuration = TimeSpan.FromMilliseconds(duration.TotalMilliseconds / Math.Max(0.01, settings.RollingSpeed));
+            // RollingSpeed 已被 Normalize() 夹紧到 (0, 4]，这里不再做冗余防御。
+            var rollingDuration = TimeSpan.FromMilliseconds(duration.TotalMilliseconds / settings.RollingSpeed);
             overlay = NotificationContent.CreateRollingTextContent(messageEvent.DisplayBody, rollingDuration, messageEvent.IsCalling ? 10 : 2);
         }
 

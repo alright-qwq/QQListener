@@ -22,6 +22,9 @@ public class Plugin : PluginBase
     {
         var settings = QqListenerSettings.Load(PluginConfigFolder);
         settings.Normalize();
+        // Normalize 仅在内存里把越界值夹紧；若不回写，磁盘上的非法值每次启动都会被
+        // 重新读出并再次夹紧，用户从外部编辑文件时也会感到设置"被回退"。
+        TrySaveSettings(settings);
 
         var diagnostics = new QqListenerDiagnosticsState();
         var assemblyPath = Assembly.GetExecutingAssembly().Location;
@@ -38,7 +41,6 @@ public class Plugin : PluginBase
         services.AddSingleton<MessageRuleEvaluator>();
         services.AddSingleton<MessageEventPipeline>();
         services.AddSingleton<ClassIslandMessageNotifier>();
-        services.AddSingleton<QqMessageProcessor>();
         services.AddSingleton<LatestMessageState>();
         services.AddSingleton(diagnostics);
 
@@ -48,6 +50,19 @@ public class Plugin : PluginBase
         RegisterActionMenu();
 
         services.AddSettingsPage<QqListenerSettingsPage>();
+    }
+
+    private static void TrySaveSettings(QqListenerSettings settings)
+    {
+        try
+        {
+            settings.Save();
+        }
+        catch (Exception ex)
+        {
+            // 启动期间没有 logger，吞掉异常避免拖累整个宿主启动。
+            System.Diagnostics.Debug.WriteLine($"[QQListener] 回写设置失败: {ex.Message}");
+        }
     }
 
     private static void RegisterBaseActions(IServiceCollection services)

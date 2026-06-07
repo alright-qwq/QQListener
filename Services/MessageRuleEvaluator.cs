@@ -61,9 +61,10 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
 
     private static string BuildSearchText(MessageEvent messageEvent)
     {
+        // 注意：不要把 SourceDisplayName（如 "QQ"）拼进搜索文本，否则用户把 "QQ" 加进
+        // 黑名单/重要关键词时，每条消息都会被强行命中。
         return string.Join(Environment.NewLine, new[]
             {
-                messageEvent.SourceDisplayName,
                 messageEvent.Sender,
                 messageEvent.Conversation,
                 messageEvent.Body,

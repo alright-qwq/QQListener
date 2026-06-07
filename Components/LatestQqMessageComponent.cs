@@ -83,10 +83,25 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
     {
         if (_latestMessage == null)
         {
-            _latestMessage = IAppHost.GetService<LatestMessageState>();
+            // 设计器/无宿主场景下 IAppHost 可能尚未初始化，GetService 会返回 null。
+            // 此处只渲染占位内容，避免 NPE。
+            try
+            {
+                _latestMessage = IAppHost.GetService<LatestMessageState>();
+            }
+            catch
+            {
+                _latestMessage = null;
+            }
         }
-        _latestMessage.PropertyChanged += OnStateChanged;
-        Settings.PropertyChanged += OnStateChanged;
+        if (_latestMessage != null)
+        {
+            _latestMessage.PropertyChanged += OnStateChanged;
+        }
+        if (Settings != null)
+        {
+            Settings.PropertyChanged += OnStateChanged;
+        }
         UpdateContent();
     }
 
@@ -96,7 +111,10 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
         {
             _latestMessage.PropertyChanged -= OnStateChanged;
         }
-        Settings.PropertyChanged -= OnStateChanged;
+        if (Settings != null)
+        {
+            Settings.PropertyChanged -= OnStateChanged;
+        }
     }
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -109,12 +127,13 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
 
     private void UpdateContent()
     {
+        var settings = Settings;
         if (_latestMessage is not { HasMessage: true })
         {
-            IsVisible = Settings.ShowPlaceholder;
+            IsVisible = settings?.ShowPlaceholder ?? true;
             StatusText = "";
             SenderText = "";
-            MessageText = Settings.PlaceholderText;
+            MessageText = settings?.PlaceholderText ?? "暂无 QQ 消息";
             IsStatusVisible = false;
             IsSenderVisible = false;
             return;
@@ -124,8 +143,8 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
         StatusText = _latestMessage.IsCalling ? "呼叫" : _latestMessage.IsImportant ? "重要" : "";
         SenderText = _latestMessage.Sender;
         MessageText = string.IsNullOrWhiteSpace(_latestMessage.Message) ? _latestMessage.Sender : _latestMessage.Message;
-        IsStatusVisible = Settings.ShowStatusTag && !string.IsNullOrEmpty(StatusText);
-        IsSenderVisible = Settings.ShowSender && !string.IsNullOrWhiteSpace(SenderText);
+        IsStatusVisible = (settings?.ShowStatusTag ?? true) && !string.IsNullOrEmpty(StatusText);
+        IsSenderVisible = (settings?.ShowSender ?? true) && !string.IsNullOrWhiteSpace(SenderText);
     }
 
 }

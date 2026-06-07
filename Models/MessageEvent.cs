@@ -25,11 +25,19 @@ public sealed record MessageEvent(
             ? $"重要 {SourceDisplayName} 消息"
             : $"{SourceDisplayName} 消息";
 
-    public string DisplaySender => string.IsNullOrWhiteSpace(Conversation)
-        ? Sender
-        : string.IsNullOrWhiteSpace(Sender)
-            ? Conversation
-            : $"{Conversation} / {Sender}";
+    public string DisplaySender
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Conversation)) return Sender;
+            if (string.IsNullOrWhiteSpace(Sender)) return Conversation;
+            // 解析器在某些两行 Toast 上会把同一段文本同时当作 Conversation 和 Sender，
+            // 这里直接去重，避免显示成 "X / X"。
+            return string.Equals(Conversation, Sender, StringComparison.Ordinal)
+                ? Sender
+                : $"{Conversation} / {Sender}";
+        }
+    }
 
     public string DisplayBody
     {

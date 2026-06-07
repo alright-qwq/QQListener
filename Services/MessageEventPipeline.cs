@@ -33,17 +33,21 @@ public class MessageEventPipeline(
                 diagnostics.RecordIgnored(reason);
                 return MessagePipelineResult.Ignore(reason, messageEvent);
             }
-
-            _seen[messageEvent.DeduplicationKey] = now;
-            CleanupSeen(now);
         }
 
         var evaluation = ruleEvaluator.Evaluate(messageEvent);
         if (evaluation.IsIgnored)
         {
+            // 不写 _seen：让规则发生变化（如用户移除黑名单项）后同 key 的合法消息能立刻命中。
             diagnostics.RecordIgnored(evaluation.Reason);
             logger.LogInformation("消息已忽略: {Reason} Sender={Sender}", evaluation.Reason, evaluation.Event.Sender);
             return MessagePipelineResult.Ignore(evaluation.Reason, evaluation.Event);
+        }
+
+        lock (_lock)
+        {
+            _seen[messageEvent.DeduplicationKey] = now;
+            CleanupSeen(now);
         }
 
         diagnostics.RecordAccepted(evaluation.Event, evaluation.Reason);

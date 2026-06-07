@@ -10,15 +10,41 @@ public sealed class WindowsNotificationReader(
     ILogger<WindowsNotificationReader> logger)
 {
     private UserNotificationListenerAccessStatus _accessStatus = UserNotificationListenerAccessStatus.Unspecified;
-    private volatile bool _hasLoggedUnavailableAppInfo;
+    // 一旦确认本进程拿不到 UserNotification.AppInfo（unpackaged 桌面 .NET 应用上
+    // 这个 WinRT projection 必抛 NotImplementedException），就别再调那个 getter：
+    // 一是避免每条 toast 都抛/捕一次拖累性能，二是避免堆栈污染日志。
+    private volatile bool _appInfoUnsupported;
 
     public async Task<IReadOnlyList<WindowsToastSnapshot>> ReadToastNotificationsAsync()
     {
-        var listener = UserNotificationListener.Current;
+        UserNotificationListener listener;
+        try
+        {
+            listener = UserNotificationListener.Current;
+        }
+        catch (Exception ex)
+        {
+            // Win10 N/精简版或受限环境下 UserNotificationListener.Current 本身就可能
+            // 抛 TypeInitialization/PlatformNotSupported/COMException。如果不接住，
+            // 上层 PollOnceAsync 会每 0.3 秒崩一次。
+            logger.LogWarning(ex, "无法获取 UserNotificationListener.Current，跳过本次轮询。");
+            diagnostics.RecordError(ex, "获取通知监听器失败");
+            return [];
+        }
+
         if (_accessStatus != UserNotificationListenerAccessStatus.Allowed)
         {
-            logger.LogInformation("正在请求通知监听权限...");
-            _accessStatus = await listener.RequestAccessAsync();
+            try
+            {
+                logger.LogInformation("正在请求通知监听权限...");
+                _accessStatus = await listener.RequestAccessAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "请求通知监听权限失败。");
+                diagnostics.RecordError(ex, "请求通知监听权限失败");
+                return [];
+            }
             diagnostics.RecordPermission(_accessStatus.ToString());
             if (_accessStatus != UserNotificationListenerAccessStatus.Allowed)
             {
@@ -83,6 +109,12 @@ public sealed class WindowsNotificationReader(
         appName = "";
         appId = "";
 
+        if (_appInfoUnsupported)
+        {
+            // 已确认本进程拿不到 AppInfo，直接走文本识别，避免无谓的抛/捕。
+            return false;
+        }
+
         try
         {
             var appInfo = notification.AppInfo;
@@ -90,26 +122,30 @@ public sealed class WindowsNotificationReader(
             appId = appInfo?.AppUserModelId ?? "";
             return true;
         }
-        catch (NotImplementedException ex)
+        catch (NotImplementedException)
         {
-            LogUnavailableAppInfoOnce(ex);
-            diagnostics.RecordAppIdentityFallback("UserNotification.AppInfo 不可用，已使用 Toast 文本识别");
+            MarkAppInfoUnsupported();
             return false;
         }
         catch (Exception ex)
         {
+            // 单条通知偶发的读取失败：不升级到"全局不支持"，下一条还可以再尝试。
             logger.LogDebug(ex, "读取通知应用标识失败，已继续读取通知文本。");
             diagnostics.RecordAppIdentityFallback($"读取 AppInfo 失败，已使用 Toast 文本识别: {ex.GetType().Name}");
             return false;
         }
     }
 
-    private void LogUnavailableAppInfoOnce(Exception exception)
+    private void MarkAppInfoUnsupported()
     {
-        if (_hasLoggedUnavailableAppInfo) return;
+        if (_appInfoUnsupported) return;
 
-        _hasLoggedUnavailableAppInfo = true;
-        logger.LogDebug(exception, "当前运行环境不支持读取 UserNotification.AppInfo，已降级为仅使用通知文本识别。");
+        _appInfoUnsupported = true;
+        // 这是预期降级，不是 bug：unpackaged 的桌面 .NET 进程访问 UserNotification.AppInfo
+        // 会抛 NotImplementedException。打成 Information 级别 + 不带堆栈，避免吓人。
+        logger.LogInformation(
+            "当前运行环境不支持读取 UserNotification.AppInfo（未打包的桌面应用即如此），已降级为仅使用通知文本识别。");
+        diagnostics.RecordAppIdentityFallback("AppInfo 不可用（unpackaged 应用限制），已降级为 Toast 文本识别");
     }
 }
 

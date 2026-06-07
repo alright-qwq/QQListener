@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace QQListener.Models;
@@ -32,25 +31,6 @@ public partial class LatestMessageState : ObservableObject
     [ObservableProperty]
     private string _conversation = "";
 
-    public void Update(string sender, string message, bool isImportant, bool isCalling)
-    {
-        var importance = isCalling
-            ? MessageImportance.Calling
-            : isImportant
-                ? MessageImportance.Important
-                : MessageImportance.Normal;
-        Update(new MessageEvent(
-            "qq.toast",
-            "QQ",
-            sender,
-            "",
-            message,
-            DateTimeOffset.Now,
-            importance,
-            [sender, message],
-            $"{sender}\u001f{message}"));
-    }
-
     public void Update(MessageEvent messageEvent)
     {
         // Set backing fields directly to avoid intermediate PropertyChanged notifications,
@@ -75,17 +55,5 @@ public partial class LatestMessageState : ObservableObject
         OnPropertyChanged(nameof(Conversation));
         OnPropertyChanged(nameof(ReceivedAt));
         OnPropertyChanged(nameof(HasMessage));
-    }
-
-    public void Clear()
-    {
-        HasMessage = false;
-        IsImportant = false;
-        IsCalling = false;
-        Importance = MessageImportance.Normal;
-        Source = "";
-        Conversation = "";
-        Sender = "";
-        Message = "";
     }
 }

@@ -34,12 +34,6 @@ var pipeline = new MessageEventPipeline(settings, evaluator, diagnostics, NullLo
 var failures = new List<string>();
 foreach (var sample in samples)
 {
-    if (sample.CandidateWhenAppInfoUnavailable is { } expectedCandidate
-        && QqToastMessageParser.LooksLikeQqToastShape(sample.Texts) != expectedCandidate)
-    {
-        failures.Add($"{sample.Name}: AppInfo-unavailable candidate expected {expectedCandidate}.");
-    }
-
     if (!parser.TryParse(sample.Texts, DateTimeOffset.Parse("2026-06-07T12:00:00+08:00"), out var parsed, out var parseReason)
         || parsed == null)
     {
@@ -127,5 +121,4 @@ internal sealed record SampleCase(
     string Importance,
     bool Ignored,
     bool ParseShouldFail = false,
-    string IgnoreReasonContains = "",
-    bool? CandidateWhenAppInfoUnavailable = null);
+    string IgnoreReasonContains = "");

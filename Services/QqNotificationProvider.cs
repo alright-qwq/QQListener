@@ -134,9 +134,8 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         }
 
         var allSnapshots = await _reader.ReadToastNotificationsAsync();
-        var snapshots = (_settings.QqOnly
-                ? allSnapshots.Where(IsQqCandidateNotification)
-                : allSnapshots)
+        var snapshots = allSnapshots
+            .Where(snapshot => QqNotificationCandidateFilter.IsCandidate(snapshot, _settings.QqOnly))
             .ToArray();
         _diagnostics.RecordCandidateFilter(allSnapshots.Count, snapshots.Length, _settings.QqOnly);
 
@@ -255,36 +254,6 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         }
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
-    }
-
-    private static bool IsQqCandidateNotification(WindowsToastSnapshot snapshot)
-    {
-        if (IsQqNotification(snapshot)) return true;
-        // 只在 AppInfo 不可用时才信赖文本形状识别；否则非 QQ 应用通知里出现的
-        // "[图片]"、"QQ"（域名、文件名、新闻标题里都可能含）会被误识为 QQ 消息。
-        if (HasUnknownAppIdentity(snapshot))
-            return QqToastMessageParser.LooksLikeQqToastShape(snapshot.Texts);
-        return false;
-    }
-
-    private static bool IsQqNotification(WindowsToastSnapshot snapshot)
-    {
-        return ContainsQqIdentity(snapshot.AppName) || ContainsQqIdentity(snapshot.AppId);
-    }
-
-    private static bool ContainsQqIdentity(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        return value.Contains("QQ", StringComparison.OrdinalIgnoreCase)
-               || value.Contains("Tim", StringComparison.OrdinalIgnoreCase)
-               || value.Contains("Tencent", StringComparison.OrdinalIgnoreCase)
-               || value.Contains("com.tencent", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool HasUnknownAppIdentity(WindowsToastSnapshot snapshot)
-    {
-        return !snapshot.IsAppIdentityAvailable
-               || (string.IsNullOrWhiteSpace(snapshot.AppName) && string.IsNullOrWhiteSpace(snapshot.AppId));
     }
 
     private static string Truncate(string value, int maxLength)

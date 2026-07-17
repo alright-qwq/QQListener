@@ -15,8 +15,7 @@
     "conversation": "",
     "body": "明天带实验报告",
     "importance": "Normal",
-    "ignored": false,
-    "candidateWhenAppInfoUnavailable": true
+    "ignored": false
   },
   {
     "name": "group-two-lines",
@@ -88,8 +87,7 @@
     "conversation": "",
     "body": "系统消息",
     "importance": "Normal",
-    "ignored": false,
-    "candidateWhenAppInfoUnavailable": false
+    "ignored": false
   },
   {
     "name": "group-no-sender-split",
@@ -98,8 +96,7 @@
     "conversation": "",
     "body": "今晚活动暂停",
     "importance": "Normal",
-    "ignored": false,
-    "candidateWhenAppInfoUnavailable": true
+    "ignored": false
   },
   {
     "name": "legacy-two-line-direct",
@@ -108,8 +105,7 @@
     "conversation": "",
     "body": "普通两行 QQ 消息",
     "importance": "Normal",
-    "ignored": false,
-    "candidateWhenAppInfoUnavailable": true
+    "ignored": false
   },
   {
     "name": "group-middle-lines",

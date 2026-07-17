@@ -56,16 +56,6 @@ public class QqToastMessageParser
         return TryParse(texts, receivedAt, out var messageEvent, out _) ? messageEvent : null;
     }
 
-    public static bool LooksLikeQqToastShape(IReadOnlyList<string> texts)
-    {
-        var lines = RemoveNoiseLines(NormalizeTexts(texts));
-        if (lines.Length == 0) return false;
-        if (HasQqTextMarker(lines)) return true;
-        if (lines.Length >= 2) return true;
-
-        return TrySplitSenderAndBody(lines[0], out _, out _);
-    }
-
     private static void ParseSingleLine(string text, ref string sender, ref string conversation, ref string body)
     {
         if (TrySplitSenderAndBody(text, out var candidateSender, out var candidateBody))
@@ -157,18 +147,6 @@ public class QqToastMessageParser
             .Where(x => !x.Equals("QQ", StringComparison.OrdinalIgnoreCase))
             .Where(x => !x.Equals("TIM", StringComparison.OrdinalIgnoreCase))
             .ToArray();
-    }
-
-    private static bool HasQqTextMarker(IEnumerable<string> lines)
-    {
-        var fullText = string.Join('\n', lines);
-        return fullText.Contains("QQ", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("TIM", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("有人@我", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("群聊", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("[图片]", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("[表情]", StringComparison.OrdinalIgnoreCase)
-               || fullText.Contains("[语音]", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CreateDeduplicationKey(string source, IEnumerable<string> values)

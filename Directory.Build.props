@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <QQListenerVersion>1.0.2.0</QQListenerVersion>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

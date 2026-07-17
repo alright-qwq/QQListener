@@ -5,8 +5,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <EnableDynamicLoading>True</EnableDynamicLoading>
+        <Version>$(QQListenerVersion)</Version>
+        <AssemblyVersion>$(QQListenerVersion)</AssemblyVersion>
+        <FileVersion>$(QQListenerVersion)</FileVersion>
+        <InformationalVersion>$(QQListenerVersion)</InformationalVersion>
     </PropertyGroup>
-
     <PropertyGroup>
         <ClassIslandPluginSdkVersion>1.7.106.2-dev-v2</ClassIslandPluginSdkVersion>
     </PropertyGroup>
@@ -16,26 +19,32 @@
         <Compile Remove="参考\**\*.cs" />
         <Compile Remove="Samples\**\*.cs" />
         <Compile Remove="Tests\**\*.cs" />
+        <Compile Remove="Tools\**\*.cs" />
         <AvaloniaResource Remove="doc\**\*" />
         <AvaloniaResource Remove="参考\**\*" />
         <AvaloniaResource Remove="Samples\**\*" />
         <AvaloniaResource Remove="Tests\**\*" />
+        <AvaloniaResource Remove="Tools\**\*" />
         <AvaloniaXaml Remove="doc\**\*" />
         <AvaloniaXaml Remove="参考\**\*" />
         <AvaloniaXaml Remove="Samples\**\*" />
         <AvaloniaXaml Remove="Tests\**\*" />
+        <AvaloniaXaml Remove="Tools\**\*" />
         <Content Remove="doc\**\*" />
         <Content Remove="参考\**\*" />
         <Content Remove="Samples\**\*" />
         <Content Remove="Tests\**\*" />
+        <Content Remove="Tools\**\*" />
         <EmbeddedResource Remove="doc\**\*" />
         <EmbeddedResource Remove="参考\**\*" />
         <EmbeddedResource Remove="Samples\**\*" />
         <EmbeddedResource Remove="Tests\**\*" />
+        <EmbeddedResource Remove="Tools\**\*" />
         <None Remove="doc\**\*" />
         <None Remove="参考\**\*" />
         <None Remove="Samples\**\*" />
         <None Remove="Tests\**\*" />
+        <None Remove="Tools\**\*" />
     </ItemGroup>
 
     <ItemGroup>

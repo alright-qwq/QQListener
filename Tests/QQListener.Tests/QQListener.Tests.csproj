@@ -24,5 +24,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="..\..\QQListener.csproj" />
+    <ProjectReference Include="..\..\Tools\QQListener.ReleaseVerifier\QQListener.ReleaseVerifier.csproj" />
   </ItemGroup>
 </Project>

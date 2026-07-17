@@ -1138,6 +1138,12 @@
         "dependencies": {
           "ClassIsland.PluginSdk": "[1.7.106.2-dev-v2, )"
         }
+      },
+      "qqlistener.releaseverifier": {
+        "type": "Project",
+        "dependencies": {
+          "YamlDotNet": "[16.3.0, )"
+        }
       }
     }
   }

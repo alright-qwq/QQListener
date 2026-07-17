@@ -13,7 +13,7 @@ namespace QQListener.Services;
 public class QqNotificationProvider : NotificationProviderBase, IHostedService
 {
     private readonly QqListenerSettings _settings;
-    private readonly WindowsNotificationReader _reader;
+    private readonly IWindowsNotificationReader _reader;
     private readonly QqToastMessageParser _parser;
     private readonly MessageEventPipeline _pipeline;
     private readonly ClassIslandMessageNotifier _notifier;
@@ -27,7 +27,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
 
     public QqNotificationProvider(
         QqListenerSettings settings,
-        WindowsNotificationReader reader,
+        IWindowsNotificationReader reader,
         QqToastMessageParser parser,
         MessageEventPipeline pipeline,
         ClassIslandMessageNotifier notifier,
@@ -109,7 +109,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         {
             try
             {
-                await PollOnceAsync();
+                await PollOnceAsync(retryPermission: false, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -125,7 +125,7 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
         }
     }
 
-    private async Task PollOnceAsync()
+    private async Task PollOnceAsync(bool retryPermission, CancellationToken cancellationToken)
     {
         if (!_settings.IsEnabled)
         {
@@ -133,7 +133,17 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             return;
         }
 
-        var allSnapshots = await _reader.ReadToastNotificationsAsync();
+        var readResult = await _reader.ReadToastNotificationsAsync(retryPermission, cancellationToken);
+        if (!readResult.IsSuccess)
+        {
+            _logger.LogDebug(
+                "跳过本次通知状态更新：{Status} {Reason}",
+                readResult.Status,
+                readResult.Reason);
+            return;
+        }
+
+        var allSnapshots = readResult.Notifications;
         var snapshots = allSnapshots
             .Where(snapshot => QqNotificationCandidateFilter.IsCandidate(snapshot, _settings.QqOnly))
             .ToArray();
@@ -212,14 +222,12 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
 
     /// <summary>
     /// 让外部（设置页"手动扫一次"按钮）排队执行一次轮询。
-    /// 不绕开 _pollLock —— 直接 await PollOnceAsync()，靠它自己内部的锁与后台轮询串行化。
     /// IsEnabled=false 时 PollOnceAsync 自身会 early-return，这里不做重复判断。
     /// </summary>
     public Task PollOnceManuallyAsync()
     {
-        // 若 listener 还没启动（StartAsync 没跑），后台 token 为空，照样能跑：
-        // PollOnceAsync 是无参数的私有方法，不依赖 cancellationToken。
-        return PollOnceAsync();
+        // 手动轮询是用户明确触发的权限重试入口。
+        return PollOnceAsync(retryPermission: true, CancellationToken.None);
     }
 
     private IEnumerable<MessageEvent> ParseVisibleEvents(IEnumerable<WindowsToastSnapshot> snapshots)

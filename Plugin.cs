@@ -41,7 +41,8 @@ public class Plugin : PluginBase
             Info.Manifest.Url);
 
         services.AddSingleton(settings);
-        services.AddSingleton<WindowsNotificationReader>();
+        services.AddSingleton<IWindowsNotificationPlatform, WindowsNotificationPlatform>();
+        services.AddSingleton<IWindowsNotificationReader, WindowsNotificationReader>();
         services.AddSingleton<QqToastMessageParser>();
         services.AddSingleton<MessageRuleEvaluator>();
         services.AddSingleton<MessageEventPipeline>();

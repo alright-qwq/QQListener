@@ -48,6 +48,23 @@ public class Plugin : PluginBase
             Info.Manifest.Author ?? "",
             Info.Manifest.Url);
 
+        RegisterRuntimeServices(services, settings, diagnostics);
+        services.AddSingleton(pluginInfo);
+
+        services.AddNotificationProvider<QqNotificationProvider>();
+        services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();
+        RegisterBaseActions(services);
+        RegisterActionMenu();
+
+        services.AddSettingsPage<QqListenerSettingsPage>();
+    }
+
+
+    internal static void RegisterRuntimeServices(
+        IServiceCollection services,
+        QqListenerSettings settings,
+        QqListenerDiagnosticsState diagnostics)
+    {
         services.AddSingleton(settings);
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<IWindowsNotificationPlatform, WindowsNotificationPlatform>();
@@ -61,16 +78,7 @@ public class Plugin : PluginBase
         services.AddSingleton<LatestMessageState>();
         services.AddSingleton<QqListenerWorker>();
         services.AddSingleton(diagnostics);
-        services.AddSingleton(pluginInfo);
-
-        services.AddNotificationProvider<QqNotificationProvider>();
-        services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();
-        RegisterBaseActions(services);
-        RegisterActionMenu();
-
-        services.AddSettingsPage<QqListenerSettingsPage>();
     }
-
     private static void TrySaveSettings(QqListenerSettings settings)
     {
         try

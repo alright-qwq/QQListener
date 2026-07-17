@@ -17,6 +17,13 @@ QQListener 是一个由 PySide6 平台移植而来的 ClassIsland 插件，用�
 3. 首次运行时允许 QQListener 访问通知中心。
 4. 在 ClassIsland 的 QQListener 设置页中按需配置关键词和时长。
 
+## 通知来源与隐私
+
+- 本项目默认面向新版 NT QQ，通过 Windows 通知中心提供的应用身份识别 QQ 通知。
+- 如果 Windows 无法提供通知的应用身份，QQListener 会有意忽略该通知，不会仅凭通知文本猜测来源；具体原因可在插件诊断页面查看。
+- 开启“仅处理 QQ 通知”时，只接受身份明确属于 QQ 的通知。关闭该选项时，也只会放行身份明确的非 QQ 通知，身份为空或未知的通知仍会被拒绝。
+- 关闭监听会立即丢弃在途轮询结果，并清空缓存的最后一条消息，防止之后通过重播功能再次显示旧的私人内容。
+
 ## 说明
 
 - 原作者是B站@BSOD-MEMZ，github原仓库：https://github.com/BSOD-MEMZ/QQListener

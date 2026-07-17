@@ -160,7 +160,7 @@ QQ/TIM 身份匹配使用窄规则：显示名仅接受忽略大小写的 `QQ`�
 5. 1-3600 秒冷却范围全部按配置兑现。
 6. 默认日志和诊断不包含发送者、正文或私人规则原文。
 7. 关闭监听后最近消息清空，UI 与自动化均不能重播。
-8. `dotnet build QQListener.sln --configuration Release --locked-mode` 成功且无错误。
+8. `dotnet restore QQListener.sln --locked-mode` 后，`dotnet build QQListener.sln --configuration Release --no-restore` 成功且无错误。
 9. `dotnet test QQListener.sln --configuration Release --no-build` 全部通过。
 10. 样例验证器通过。
 11. CIPX 中 manifest、DLL 版本与项目版本一致，生成的 MD5 摘要验证通过。

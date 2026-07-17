@@ -46,6 +46,7 @@ public class Plugin : PluginBase
         services.AddSingleton<QqToastMessageParser>();
         services.AddSingleton<MessageRuleEvaluator>();
         services.AddSingleton<MessageEventPipeline>();
+        services.AddSingleton<IQqNotificationPoller, QqNotificationPoller>();
         services.AddSingleton<ClassIslandMessageNotifier>();
         services.AddSingleton<LatestMessageState>();
         services.AddSingleton(diagnostics);

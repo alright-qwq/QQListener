@@ -15,21 +15,27 @@
         <Compile Remove="doc\**\*.cs" />
         <Compile Remove="参考\**\*.cs" />
         <Compile Remove="Samples\**\*.cs" />
+        <Compile Remove="Tests\**\*.cs" />
         <AvaloniaResource Remove="doc\**\*" />
         <AvaloniaResource Remove="参考\**\*" />
         <AvaloniaResource Remove="Samples\**\*" />
+        <AvaloniaResource Remove="Tests\**\*" />
         <AvaloniaXaml Remove="doc\**\*" />
         <AvaloniaXaml Remove="参考\**\*" />
         <AvaloniaXaml Remove="Samples\**\*" />
+        <AvaloniaXaml Remove="Tests\**\*" />
         <Content Remove="doc\**\*" />
         <Content Remove="参考\**\*" />
         <Content Remove="Samples\**\*" />
+        <Content Remove="Tests\**\*" />
         <EmbeddedResource Remove="doc\**\*" />
         <EmbeddedResource Remove="参考\**\*" />
         <EmbeddedResource Remove="Samples\**\*" />
+        <EmbeddedResource Remove="Tests\**\*" />
         <None Remove="doc\**\*" />
         <None Remove="参考\**\*" />
         <None Remove="Samples\**\*" />
+        <None Remove="Tests\**\*" />
     </ItemGroup>
 
     <ItemGroup>

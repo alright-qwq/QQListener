@@ -135,6 +135,36 @@ public class WindowsNotificationReaderTests
         Assert.Equal(2, platform.RequestAccessCount);
     }
 
+    [Theory]
+    [InlineData(PlatformAccessStatus.Denied, false, WindowsNotificationReadStatus.ReadFailed)]
+    [InlineData(PlatformAccessStatus.Denied, true, WindowsNotificationReadStatus.ListenerUnavailable)]
+    [InlineData(PlatformAccessStatus.Unspecified, false, WindowsNotificationReadStatus.ReadFailed)]
+    [InlineData(PlatformAccessStatus.Unspecified, true, WindowsNotificationReadStatus.ListenerUnavailable)]
+    public async Task TransientExplicitRetryFailureClearsPreviousPermissionLatch(
+        PlatformAccessStatus initialAccessStatus,
+        bool listenerUnavailable,
+        WindowsNotificationReadStatus expectedRetryFailure)
+    {
+        var platform = new FakeWindowsNotificationPlatform { AccessStatus = initialAccessStatus };
+        var reader = CreateReader(platform);
+
+        var denied = await reader.ReadToastNotificationsAsync(false, default);
+
+        platform.RequestAccessException = listenerUnavailable
+            ? new WindowsNotificationListenerUnavailableException("listener unavailable")
+            : new InvalidOperationException("request failed");
+        var retryFailed = await reader.ReadToastNotificationsAsync(true, default);
+
+        platform.RequestAccessException = null;
+        platform.AccessStatus = PlatformAccessStatus.Allowed;
+        var recovered = await reader.ReadToastNotificationsAsync(false, default);
+
+        Assert.Equal(WindowsNotificationReadStatus.PermissionDenied, denied.Status);
+        Assert.Equal(expectedRetryFailure, retryFailed.Status);
+        Assert.Equal(WindowsNotificationReadStatus.Success, recovered.Status);
+        Assert.Equal(3, platform.RequestAccessCount);
+    }
+
     private static WindowsNotificationReader CreateReader(IWindowsNotificationPlatform platform)
     {
         return new WindowsNotificationReader(

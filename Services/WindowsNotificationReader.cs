@@ -88,11 +88,17 @@ public sealed class WindowsNotificationReader(
             }
             catch (WindowsNotificationListenerUnavailableException ex)
             {
+                _accessStatus = PlatformAccessStatus.Unspecified;
+                _hasRequestedAccess = false;
+                _latchedAccessFailure = null;
                 return RecordListenerUnavailable(ex);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "请求通知监听权限失败。");
+                _accessStatus = PlatformAccessStatus.Unspecified;
+                _hasRequestedAccess = false;
+                _latchedAccessFailure = null;
                 diagnostics.RecordError(ex, "请求通知监听权限失败");
                 return new WindowsNotificationReadResult(
                     WindowsNotificationReadStatus.ReadFailed,

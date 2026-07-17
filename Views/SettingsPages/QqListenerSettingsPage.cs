@@ -164,27 +164,16 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
         }
     }
 
-    private void OnReplayLatestClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void OnReplayLatestClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         try
         {
+            if (!_settings.IsEnabled) return;
+
             var provider = TryGetProvider();
-            if (provider == null) return;
+            if (provider == null || !_settings.IsEnabled) return;
 
-            var latest = IAppHost.GetService<LatestMessageState>();
-            if (latest is not { HasMessage: true }) return; // 静默：无消息不弹
-
-            var message = new MessageEvent(
-                "qq.toast",
-                string.IsNullOrWhiteSpace(latest.Source) ? "QQ" : latest.Source,
-                latest.Sender,
-                latest.Conversation,
-                latest.Message,
-                latest.ReceivedAt,
-                latest.Importance,
-                [latest.Sender, latest.Message],
-                $"qq.toast:replay:{latest.Sender}");
-            provider.ShowQqNotification(message);
+            await provider.ReplayLatestAsync();
         }
         catch (Exception ex)
         {

@@ -130,6 +130,34 @@ public class QqListenerWorkerTests
         Assert.Equal(1, poller.ResetCount);
     }
 
+    [Fact]
+    public async Task ReplayQueuedThenDisabledDoesNotShow()
+    {
+        var settings = new QqListenerSettings { IsEnabled = true };
+        var latest = new LatestMessageState();
+        latest.Update(Event("private"));
+        var worker = CreateWorker(settings, new SequencePoller(Accepted()), latest);
+        var dispatchStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispatch = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var shown = 0;
+
+        var replay = worker.ReplayLatestAsync(async (_, showIfCurrent, _) =>
+        {
+            dispatchStarted.TrySetResult(true);
+            await releaseDispatch.Task;
+            showIfCurrent(() => shown++);
+        }, default);
+        await dispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        settings.IsEnabled = false;
+        releaseDispatch.TrySetResult(true);
+        await replay.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(0, shown);
+        Assert.False(latest.HasMessage);
+    }
+
     private static QqListenerWorker CreateWorker(
         QqListenerSettings settings,
         IQqNotificationPoller poller,

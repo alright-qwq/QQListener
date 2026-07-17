@@ -29,7 +29,12 @@ settings.Normalize();
 var diagnostics = new QqListenerDiagnosticsState();
 var parser = new QqToastMessageParser();
 var evaluator = new MessageRuleEvaluator(settings);
-var pipeline = new MessageEventPipeline(settings, evaluator, diagnostics, NullLogger<MessageEventPipeline>.Instance);
+var pipeline = new MessageEventPipeline(
+    settings,
+    evaluator,
+    diagnostics,
+    NullLogger<MessageEventPipeline>.Instance,
+    TimeProvider.System);
 
 var failures = new List<string>();
 foreach (var sample in samples)

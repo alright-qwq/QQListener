@@ -49,6 +49,7 @@ public class Plugin : PluginBase
             Info.Manifest.Url);
 
         services.AddSingleton(settings);
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<IWindowsNotificationPlatform, WindowsNotificationPlatform>();
         services.AddSingleton<IWindowsNotificationReader, WindowsNotificationReader>();
         services.AddSingleton<QqToastMessageParser>();

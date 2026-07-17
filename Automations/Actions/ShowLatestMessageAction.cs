@@ -9,29 +9,13 @@ using QQListener.Services;
 namespace QQListener.Automations.Actions;
 
 [ActionInfo("QQListener.ShowLatestMessage", "显示最后一条 QQ 消息", "", addDefaultToMenu: false)]
-public class ShowLatestMessageAction(LatestMessageState latestMessage) : ActionBase
+public class ShowLatestMessageAction(QqListenerSettings settings) : ActionBase
 {
     protected override async Task OnInvoke()
     {
         await base.OnInvoke();
 
-        if (!latestMessage.HasMessage)
-        {
-            // 没有最近消息时静默：用户主动触发"显示最后一条"却看到"暂无消息"提醒
-            // 反而像 bug，不如不打扰。诊断面板里仍能看到状态。
-            return;
-        }
-
-        var message = new MessageEvent(
-            "qq.toast",
-            string.IsNullOrWhiteSpace(latestMessage.Source) ? "QQ" : latestMessage.Source,
-            latestMessage.Sender,
-            latestMessage.Conversation,
-            latestMessage.Message,
-            latestMessage.ReceivedAt,
-            latestMessage.Importance,
-            [latestMessage.Sender, latestMessage.Message],
-            $"qq.toast:replay:{latestMessage.Sender}");
+        if (!settings.IsEnabled) return;
 
         // QqNotificationProvider 通过 AddNotificationProvider 同时注册为 IHostedService，
         // 但它没有暴露在 DI 里作为可直接注入的服务。先尝试 GetService<>()，再退而
@@ -41,6 +25,8 @@ public class ShowLatestMessageAction(LatestMessageState latestMessage) : ActionB
 
         var provider = host.GetService<QqNotificationProvider>()
                        ?? host.GetServices<IHostedService>().OfType<QqNotificationProvider>().FirstOrDefault();
-        provider?.ShowQqNotification(message);
+        if (provider is null || !settings.IsEnabled) return;
+
+        await provider.ReplayLatestAsync();
     }
 }

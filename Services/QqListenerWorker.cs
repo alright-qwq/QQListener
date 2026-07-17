@@ -147,6 +147,66 @@ public sealed class QqListenerWorker
         return result;
     }
 
+    public async Task ReplayLatestAsync(
+        Func<MessageEvent, Action<Action>, CancellationToken, Task> dispatchAsync,
+        CancellationToken cancellationToken)
+    {
+        long generation;
+        CancellationToken generationToken;
+        lock (_stateLock)
+        {
+            if (!_settings.IsEnabled) return;
+
+            generation = _generation;
+            generationToken = _generationCancellation.Token;
+        }
+
+        if (!_latestMessage.TryCreateReplayEvent(out var message)) return;
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            generationToken);
+
+        bool CanShow()
+        {
+            if (linkedCancellation.IsCancellationRequested) return false;
+
+            lock (_stateLock)
+            {
+                return generation == _generation
+                       && _settings.IsEnabled
+                       && !linkedCancellation.IsCancellationRequested;
+            }
+        }
+
+        void ShowIfCurrent(Action show)
+        {
+            if (linkedCancellation.IsCancellationRequested) return;
+
+            lock (_stateLock)
+            {
+                if (generation == _generation
+                    && _settings.IsEnabled
+                    && !linkedCancellation.IsCancellationRequested)
+                {
+                    show();
+                }
+            }
+        }
+
+        if (!CanShow()) return;
+
+        try
+        {
+            await dispatchAsync(message, ShowIfCurrent, linkedCancellation.Token);
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested
+                  && generationToken.IsCancellationRequested)
+        {
+        }
+    }
+
     public void ResetDetectionState()
     {
         _poller.ResetDetectionState();

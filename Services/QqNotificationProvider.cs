@@ -100,12 +100,17 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
             CancellationToken.None);
     }
 
-    public void ShowQqNotification(MessageEvent message)
+    public Task ReplayLatestAsync(CancellationToken cancellationToken = default)
     {
-        _notifier.Show(message, ShowNotification);
+        return _worker.ReplayLatestAsync(
+            (message, showIfCurrent, token) => _notifier.ShowAsync(
+                message,
+                request => showIfCurrent(() => ShowNotification(request)),
+                token),
+            cancellationToken);
     }
 
-    public Task ShowQqNotificationAsync(MessageEvent message, CancellationToken cancellationToken)
+    private Task ShowQqNotificationAsync(MessageEvent message, CancellationToken cancellationToken)
     {
         return _notifier.ShowAsync(message, ShowNotification, cancellationToken);
     }

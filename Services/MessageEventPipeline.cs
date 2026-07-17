@@ -7,7 +7,8 @@ public class MessageEventPipeline(
     QqListenerSettings settings,
     MessageRuleEvaluator ruleEvaluator,
     QqListenerDiagnosticsState diagnostics,
-    ILogger<MessageEventPipeline> logger)
+    ILogger<MessageEventPipeline> logger,
+    TimeProvider timeProvider)
 {
     private readonly Dictionary<string, DateTimeOffset> _seen = new(StringComparer.Ordinal);
     private HashSet<string> _activeDeduplicationKeys = [];
@@ -15,7 +16,8 @@ public class MessageEventPipeline(
 
     public MessagePipelineResult Process(MessageEvent messageEvent)
     {
-        var now = DateTimeOffset.Now;
+        var now = timeProvider.GetUtcNow();
+        var cooldown = TimeSpan.FromSeconds(Math.Clamp(settings.CooldownSeconds, 1, 3600));
 
         lock (_lock)
         {
@@ -27,7 +29,7 @@ public class MessageEventPipeline(
             }
 
             if (_seen.TryGetValue(messageEvent.DeduplicationKey, out var seenAt)
-                && now - seenAt < TimeSpan.FromSeconds(settings.CooldownSeconds))
+                && now - seenAt < cooldown)
             {
                 var reason = $"去重冷却中: {settings.CooldownSeconds}s";
                 diagnostics.RecordIgnored(reason);
@@ -40,14 +42,17 @@ public class MessageEventPipeline(
         {
             // 不写 _seen：让规则发生变化（如用户移除黑名单项）后同 key 的合法消息能立刻命中。
             diagnostics.RecordIgnored(evaluation.Reason);
-            logger.LogInformation("消息已忽略: {Reason} Sender={Sender}", evaluation.Reason, evaluation.Event.Sender);
+            logger.LogInformation(
+                "消息已忽略: {Reason} Importance={Importance}",
+                evaluation.Reason,
+                evaluation.Event.Importance);
             return MessagePipelineResult.Ignore(evaluation.Reason, evaluation.Event);
         }
 
         lock (_lock)
         {
             _seen[messageEvent.DeduplicationKey] = now;
-            CleanupSeen(now);
+            CleanupSeen(now, cooldown);
         }
 
         diagnostics.RecordAccepted(evaluation.Event, evaluation.Reason);
@@ -76,9 +81,9 @@ public class MessageEventPipeline(
         }
     }
 
-    private void CleanupSeen(DateTimeOffset now)
+    private void CleanupSeen(DateTimeOffset now, TimeSpan cooldown)
     {
-        foreach (var item in _seen.Where(x => now - x.Value > TimeSpan.FromMinutes(10)).ToArray())
+        foreach (var item in _seen.Where(x => now - x.Value >= cooldown).ToArray())
         {
             _seen.Remove(item.Key);
         }

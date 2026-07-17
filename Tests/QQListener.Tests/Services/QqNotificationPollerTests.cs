@@ -124,7 +124,8 @@ public class QqNotificationPollerTests
             settings,
             evaluator,
             diagnostics,
-            NullLogger<MessageEventPipeline>.Instance);
+            NullLogger<MessageEventPipeline>.Instance,
+            TimeProvider.System);
 
         return new QqNotificationPoller(
             settings,

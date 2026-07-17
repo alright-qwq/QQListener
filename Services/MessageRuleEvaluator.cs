@@ -14,7 +14,7 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
             return new MessageRuleEvaluationResult(
                 messageEvent with { Importance = MessageImportance.Ignored },
                 true,
-                $"命中黑名单: {blacklist}");
+                "命中黑名单规则");
         }
 
         if (settings.CallingEnabled
@@ -24,7 +24,7 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
             return new MessageRuleEvaluationResult(
                 messageEvent with { Importance = MessageImportance.Calling },
                 false,
-                $"命中呼叫关键词: {settings.CallingKeyword}");
+                "命中呼叫关键词");
         }
 
         var importantPerson = settings.ImportantPersons.FirstOrDefault(x => Contains(messageEvent.Sender, x));
@@ -33,7 +33,7 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
             return new MessageRuleEvaluationResult(
                 messageEvent with { Importance = MessageImportance.Important },
                 false,
-                $"命中重要人物: {importantPerson}");
+                "命中重要人物规则");
         }
 
         var importantKeyword = settings.ImportantKeywords.FirstOrDefault(x => Contains(fullText, x));
@@ -42,7 +42,7 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
             return new MessageRuleEvaluationResult(
                 messageEvent with { Importance = MessageImportance.Important },
                 false,
-                $"命中重要关键词: {importantKeyword}");
+                "命中重要关键词");
         }
 
         if (settings.SomeoneAtMe && Contains(fullText, "有人@我"))

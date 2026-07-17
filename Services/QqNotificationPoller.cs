@@ -117,10 +117,10 @@ public sealed class QqNotificationPoller(
                     }
 
                     logger.LogInformation(
-                        "收到 {Type}消息: {Sender} {MessagePreview} Reason={Reason}",
+                        "收到消息: Importance={Importance} TextLength={TextLength} Source={Source} Reason={Reason}",
                         FormatImportance(processResult.Event.Importance),
-                        processResult.Event.DisplaySender,
-                        Truncate(processResult.Event.Body, 30),
+                        processResult.Event.Body.Length,
+                        processResult.Event.SourceDisplayName,
                         processResult.Reason);
                     acceptedEvents.Add(processResult.Event);
                 }
@@ -188,12 +188,6 @@ public sealed class QqNotificationPoller(
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(bytes);
-    }
-
-    private static string Truncate(string value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value) || value.Length <= maxLength) return value ?? "";
-        return value[..maxLength] + "...";
     }
 
     private static string FormatImportance(MessageImportance importance) => importance switch

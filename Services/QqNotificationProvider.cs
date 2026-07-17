@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using ClassIsland.Core.Abstractions.Services.NotificationProviders;
 using ClassIsland.Core.Attributes;
 using Microsoft.Extensions.Hosting;
@@ -11,41 +10,29 @@ namespace QQListener.Services;
 public class QqNotificationProvider : NotificationProviderBase, IHostedService
 {
     private readonly QqListenerSettings _settings;
+    private readonly QqListenerWorker _worker;
     private readonly IQqNotificationPoller _poller;
     private readonly ClassIslandMessageNotifier _notifier;
-    private readonly LatestMessageState _latestMessage;
     private readonly QqListenerDiagnosticsState _diagnostics;
     private readonly ILogger<QqNotificationProvider> _logger;
+    private readonly object _lifecycleLock = new();
     private CancellationTokenSource? _listenerCts;
+    private Task? _listenerTask;
 
     public QqNotificationProvider(
         QqListenerSettings settings,
+        QqListenerWorker worker,
         IQqNotificationPoller poller,
         ClassIslandMessageNotifier notifier,
-        LatestMessageState latestMessage,
         QqListenerDiagnosticsState diagnostics,
         ILogger<QqNotificationProvider> logger)
     {
         _settings = settings;
+        _worker = worker;
         _poller = poller;
         _notifier = notifier;
-        _latestMessage = latestMessage;
         _diagnostics = diagnostics;
         _logger = logger;
-        _settings.PropertyChanged += OnSettingsPropertyChanged;
-    }
-
-    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(QqListenerSettings.IsEnabled) && _settings.IsEnabled)
-        {
-            ResetDetectionState();
-        }
-
-        if (e.PropertyName == nameof(QqListenerSettings.IsEnabled))
-        {
-            _diagnostics.MarkEnabledChanged(_settings.IsEnabled);
-        }
     }
 
     public void ResetDetectionState()
@@ -55,88 +42,71 @@ public class QqNotificationProvider : NotificationProviderBase, IHostedService
 
     Task IHostedService.StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("QQListener 监听已启动（扫描间隔 {Interval}s，QqOnly={QqOnly}）",
-            _settings.ScanIntervalSeconds, _settings.QqOnly);
-        _diagnostics.MarkStarted(_settings.IsEnabled);
+        lock (_lifecycleLock)
+        {
+            if (_listenerTask is { IsCompleted: false })
+            {
+                return Task.CompletedTask;
+            }
 
-        _listenerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _ = Task.Run(() => ListenAsync(_listenerCts.Token), CancellationToken.None);
+            _listenerCts?.Dispose();
+            _listenerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _listenerTask = _worker.RunAsync(ShowQqNotificationAsync, _listenerCts.Token);
+        }
+
+        _logger.LogInformation(
+            "QQListener 监听已启动（扫描间隔 {Interval}s，QqOnly={QqOnly}）",
+            _settings.ScanIntervalSeconds,
+            _settings.QqOnly);
+        _diagnostics.MarkStarted(_settings.IsEnabled);
         return Task.CompletedTask;
     }
 
     async Task IHostedService.StopAsync(CancellationToken cancellationToken)
     {
-        if (_listenerCts == null) return;
-
-        try
+        Task? listenerTask;
+        CancellationTokenSource? listenerCts;
+        lock (_lifecycleLock)
         {
-            _logger.LogInformation("QQListener 监听正在停止...");
-            await _listenerCts.CancelAsync();
+            listenerTask = _listenerTask;
+            listenerCts = _listenerCts;
         }
-        finally
+
+        if (listenerTask is null || listenerCts is null) return;
+
+        _logger.LogInformation("QQListener 监听正在停止...");
+        await listenerCts.CancelAsync();
+        await listenerTask.WaitAsync(cancellationToken);
+
+        lock (_lifecycleLock)
         {
-            _listenerCts.Dispose();
-            _listenerCts = null;
+            if (ReferenceEquals(_listenerTask, listenerTask))
+            {
+                _listenerTask = null;
+                _listenerCts = null;
+                listenerCts.Dispose();
+            }
         }
 
         _logger.LogInformation("QQListener 监听已停止。");
         _diagnostics.MarkStopped();
     }
 
-    private async Task ListenAsync(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await PollOnceAsync(retryPermission: false, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "QQ 通知监听轮询失败。");
-                _diagnostics.RecordError(ex, "监听轮询失败");
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(_settings.ScanIntervalSeconds), cancellationToken);
-        }
-    }
-
-    private async Task PollOnceAsync(bool retryPermission, CancellationToken cancellationToken)
-    {
-        if (!_settings.IsEnabled)
-        {
-            _diagnostics.MarkEnabledChanged(false);
-            return;
-        }
-
-        var pollResult = await _poller.PollAsync(retryPermission, cancellationToken);
-        if (!pollResult.IsSuccess)
-        {
-            _logger.LogDebug(
-                "跳过本次通知状态更新：{Status} {Reason}",
-                pollResult.ReadStatus,
-                pollResult.Reason);
-            return;
-        }
-
-        foreach (var message in pollResult.AcceptedEvents)
-        {
-            _latestMessage.Update(message);
-            ShowQqNotification(message);
-        }
-    }
-
     public Task PollOnceManuallyAsync()
     {
-        return PollOnceAsync(retryPermission: true, CancellationToken.None);
+        return _worker.PollOnceAndDispatchAsync(
+            retryPermission: true,
+            ShowQqNotificationAsync,
+            CancellationToken.None);
     }
 
     public void ShowQqNotification(MessageEvent message)
     {
         _notifier.Show(message, ShowNotification);
+    }
+
+    public Task ShowQqNotificationAsync(MessageEvent message, CancellationToken cancellationToken)
+    {
+        return _notifier.ShowAsync(message, ShowNotification, cancellationToken);
     }
 }

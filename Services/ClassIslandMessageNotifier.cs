@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using ClassIsland.Core.Models.Notification;
 using QQListener.Models;
 
@@ -16,6 +17,31 @@ public class ClassIslandMessageNotifier(QqListenerSettings settings)
             DoShow();
         else
             Avalonia.Threading.Dispatcher.UIThread.Post(DoShow);
+    }
+
+    public async Task ShowAsync(
+        MessageEvent messageEvent,
+        Action<NotificationRequest> showNotification,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        void DoShow()
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            showNotification(CreateRequest(messageEvent));
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            DoShow();
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(
+            DoShow,
+            DispatcherPriority.Normal,
+            cancellationToken);
     }
 
     public NotificationRequest CreateRequest(MessageEvent messageEvent)
@@ -59,8 +85,11 @@ public class ClassIslandMessageNotifier(QqListenerSettings settings)
 
     public TimeSpan GetDuration(MessageImportance importance) => importance switch
     {
-        MessageImportance.Calling => TimeSpan.FromSeconds(settings.CallingDurationSeconds),
-        MessageImportance.Important => TimeSpan.FromSeconds(settings.ImportantDurationSeconds),
-        _ => TimeSpan.FromSeconds(settings.NormalDurationSeconds)
+        MessageImportance.Calling => TimeSpan.FromSeconds(
+            Math.Clamp(settings.CallingDurationSeconds, 1, 86400)),
+        MessageImportance.Important => TimeSpan.FromSeconds(
+            Math.Clamp(settings.ImportantDurationSeconds, 1, 3600)),
+        _ => TimeSpan.FromSeconds(
+            Math.Clamp(settings.NormalDurationSeconds, 1, 3600))
     };
 }

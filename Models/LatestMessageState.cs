@@ -56,4 +56,28 @@ public partial class LatestMessageState : ObservableObject
         OnPropertyChanged(nameof(ReceivedAt));
         OnPropertyChanged(nameof(HasMessage));
     }
+
+    public void Clear()
+    {
+#pragma warning disable MVVMTK0034
+        _sender = "";
+        _message = "";
+        _conversation = "";
+        _source = "";
+        _receivedAt = default;
+        _hasMessage = false;
+        _isImportant = false;
+        _isCalling = false;
+        _importance = MessageImportance.Normal;
+#pragma warning restore MVVMTK0034
+        OnPropertyChanged(nameof(Sender));
+        OnPropertyChanged(nameof(Message));
+        OnPropertyChanged(nameof(IsImportant));
+        OnPropertyChanged(nameof(IsCalling));
+        OnPropertyChanged(nameof(Importance));
+        OnPropertyChanged(nameof(Source));
+        OnPropertyChanged(nameof(Conversation));
+        OnPropertyChanged(nameof(ReceivedAt));
+        OnPropertyChanged(nameof(HasMessage));
+    }
 }

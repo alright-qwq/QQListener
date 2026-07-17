@@ -47,8 +47,10 @@ public class Plugin : PluginBase
         services.AddSingleton<MessageRuleEvaluator>();
         services.AddSingleton<MessageEventPipeline>();
         services.AddSingleton<IQqNotificationPoller, QqNotificationPoller>();
+        services.AddSingleton<IQqListenerDelay, SystemQqListenerDelay>();
         services.AddSingleton<ClassIslandMessageNotifier>();
         services.AddSingleton<LatestMessageState>();
+        services.AddSingleton<QqListenerWorker>();
         services.AddSingleton(diagnostics);
         services.AddSingleton(pluginInfo);
 

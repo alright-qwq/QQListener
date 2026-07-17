@@ -66,10 +66,9 @@ WindowsNotificationReader
 
 权限请求只执行一次并缓存结果。拒绝状态不会在每个 0.3 秒轮询中重新请求；用户通过设置页“手动扫一次”可以显式重试。连续读取失败采用有上限的退避，成功后恢复用户配置的扫描间隔。
 
-候选筛选必须同时满足：
+任何进入解析的通知都必须满足 `IsAppIdentityAvailable == true`。`QqOnly=true` 时还要求 `AppName` 或 `AppId` 明确匹配 QQ/TIM；`QqOnly=false` 时允许身份已知的非 QQ 通知，但仍拒绝未知身份。
 
-1. `IsAppIdentityAvailable == true`；
-2. `AppName` 或 `AppId` 明确匹配 QQ/TIM 标识。
+QQ/TIM 身份匹配使用窄规则：显示名仅接受忽略大小写的 `QQ`、`腾讯QQ`、`TIM`；AppId 去除标点并转为小写后，只接受 `tencentqq`、`qqnt`、`comtencentqq`、`tencenttim` 或 `comtencenttim` 标记。单独出现 `Tencent`、`QQ` 或 `Tim` 不是充分条件。
 
 应用身份未知时直接记录“无法确认应用来源，已忽略”，不调用解析器。原有 `LooksLikeQqToastShape` 不再参与 provider 的来源筛选，并删除把普通双行 Toast 固化为候选的测试期望。
 

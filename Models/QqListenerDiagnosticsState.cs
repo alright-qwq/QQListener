@@ -90,13 +90,13 @@ public partial class QqListenerDiagnosticsState : ObservableObject
         LastReadCount = count;
 
         LastReadSummary = unavailableAppIdentityCount > 0
-            ? $"{LastReadAt:HH:mm:ss} 读取 {count} 条通知，{unavailableAppIdentityCount} 条使用文本识别"
+            ? $"{LastReadAt:HH:mm:ss} 读取 {count} 条通知，{unavailableAppIdentityCount} 条因无法确认应用来源将被忽略"
             : $"{LastReadAt:HH:mm:ss} 读取 {count} 条通知";
 
         if (count > 0)
         {
             AppIdentityStatus = unavailableAppIdentityCount > 0
-                ? "AppInfo 不可用，已降级为 Toast 文本识别"
+                ? "AppInfo 不可用，无法确认应用来源，相关通知将被忽略"
                 : "AppInfo 可用";
         }
     }
@@ -111,7 +111,7 @@ public partial class QqListenerDiagnosticsState : ObservableObject
     public void RecordAppIdentityFallback(string reason)
     {
         AppIdentityStatus = string.IsNullOrWhiteSpace(reason)
-            ? "AppInfo 不可用，已降级为 Toast 文本识别"
+            ? "AppInfo 不可用，无法确认应用来源，相关通知将被忽略"
             : reason;
     }
 

@@ -111,7 +111,7 @@ public sealed class WindowsNotificationReader(
 
         if (_appInfoUnsupported)
         {
-            // 已确认本进程拿不到 AppInfo，直接走文本识别，避免无谓的抛/捕。
+            // 已确认本进程拿不到 AppInfo，无法确认应用来源；后续筛选将忽略该通知。
             return false;
         }
 
@@ -130,8 +130,8 @@ public sealed class WindowsNotificationReader(
         catch (Exception ex)
         {
             // 单条通知偶发的读取失败：不升级到"全局不支持"，下一条还可以再尝试。
-            logger.LogDebug(ex, "读取通知应用标识失败，已继续读取通知文本。");
-            diagnostics.RecordAppIdentityFallback($"读取 AppInfo 失败，已使用 Toast 文本识别: {ex.GetType().Name}");
+            logger.LogDebug(ex, "读取通知应用身份失败，无法确认应用来源，本条通知将被忽略。");
+            diagnostics.RecordAppIdentityFallback($"读取 AppInfo 失败，无法确认应用来源，本条通知将被忽略: {ex.GetType().Name}");
             return false;
         }
     }
@@ -141,11 +141,11 @@ public sealed class WindowsNotificationReader(
         if (_appInfoUnsupported) return;
 
         _appInfoUnsupported = true;
-        // 这是预期降级，不是 bug：unpackaged 的桌面 .NET 进程访问 UserNotification.AppInfo
-        // 会抛 NotImplementedException。打成 Information 级别 + 不带堆栈，避免吓人。
+        // 这是预期的平台限制，不是 bug：unpackaged 的桌面 .NET 进程访问 UserNotification.AppInfo
+        // 会抛 NotImplementedException。使用 Information 级别并明确相关通知将因来源未知被忽略。
         logger.LogInformation(
-            "当前运行环境不支持读取 UserNotification.AppInfo（未打包的桌面应用即如此），已降级为仅使用通知文本识别。");
-        diagnostics.RecordAppIdentityFallback("AppInfo 不可用（unpackaged 应用限制），已降级为 Toast 文本识别");
+            "当前运行环境不支持读取 UserNotification.AppInfo（未打包的桌面应用即如此），无法确认通知应用来源；相关通知将被忽略。");
+        diagnostics.RecordAppIdentityFallback("AppInfo 不可用（unpackaged 应用限制），无法确认应用来源，相关通知将被忽略");
     }
 }
 

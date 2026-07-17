@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,6 +13,7 @@ public partial class QqListenerSettings : ObservableObject
 
     private readonly object _saveLock = new();
     private volatile int _suppressAutoSaveCount;
+    private bool _preserveBackupOnNextSave;
 
     [ObservableProperty]
     private bool _isEnabled = true;
@@ -75,34 +75,52 @@ public partial class QqListenerSettings : ObservableObject
     [JsonIgnore]
     public string SettingsFilePath => Path.Combine(SettingsDirectory, "settings.json");
 
+    [JsonIgnore]
+    public string BackupFilePath => SettingsFilePath + ".bak";
+
+    [JsonIgnore]
+    public bool HasLoadWarning { get; private set; }
+
+    [JsonIgnore]
+    public string LoadWarning { get; private set; } = "";
+
     public static QqListenerSettings Load(string directory)
     {
-        var path = Path.Combine(directory, "settings.json");
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return new QqListenerSettings { SettingsDirectory = directory };
-            }
+        var primaryPath = Path.Combine(directory, "settings.json");
+        var backupPath = primaryPath + ".bak";
 
-            var json = File.ReadAllText(path);
-            var settings = JsonSerializer.Deserialize<QqListenerSettings>(json) ?? new QqListenerSettings();
-            settings.SettingsDirectory = directory;
-            return settings;
-        }
-        catch (Exception ex)
+        if (TryLoadFile(primaryPath, directory, out var primary))
         {
-            Debug.WriteLine($"[QQListener] 加载设置失败，使用默认设置: {ex.Message}");
-            return new QqListenerSettings { SettingsDirectory = directory };
+            return primary;
         }
+
+        if (TryLoadFile(backupPath, directory, out var backup))
+        {
+            backup.IsEnabled = false;
+            backup.HasLoadWarning = true;
+            backup.LoadWarning = File.Exists(primaryPath)
+                ? "主设置文件无法读取，已从备份恢复并关闭监听。"
+                : "主设置文件缺失，已从备份恢复并关闭监听。";
+            backup._preserveBackupOnNextSave = true;
+            return backup;
+        }
+
+        return new QqListenerSettings
+        {
+            SettingsDirectory = directory,
+            IsEnabled = false,
+            HasLoadWarning = true,
+            LoadWarning = File.Exists(primaryPath) || File.Exists(backupPath)
+                ? "设置文件及备份均无法读取，已使用关闭监听的默认设置。"
+                : "未找到设置文件或备份，监听保持关闭。"
+        };
     }
 
     public void Save()
     {
         lock (_saveLock)
         {
-            Directory.CreateDirectory(SettingsDirectory);
-            File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(this, JsonOptions));
+            SaveCoreAtomic();
         }
     }
 
@@ -122,8 +140,7 @@ public partial class QqListenerSettings : ObservableObject
             {
                 Interlocked.Decrement(ref _suppressAutoSaveCount);
             }
-            Directory.CreateDirectory(SettingsDirectory);
-            File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(this, JsonOptions));
+            SaveCoreAtomic();
         }
     }
 
@@ -144,5 +161,75 @@ public partial class QqListenerSettings : ObservableObject
             .Split(["\r\n", "\n", "\r"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToArray();
+    }
+
+    private void SaveCoreAtomic()
+    {
+        Directory.CreateDirectory(SettingsDirectory);
+        var temporaryPath = $"{SettingsFilePath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (var stream = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       bufferSize: 4096,
+                       FileOptions.WriteThrough))
+            {
+                JsonSerializer.Serialize(stream, this, JsonOptions);
+                stream.Flush(flushToDisk: true);
+            }
+
+            if (!File.Exists(SettingsFilePath))
+            {
+                File.Move(temporaryPath, SettingsFilePath);
+            }
+            else if (_preserveBackupOnNextSave)
+            {
+                File.Replace(temporaryPath, SettingsFilePath, null, ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Replace(
+                    temporaryPath,
+                    SettingsFilePath,
+                    BackupFilePath,
+                    ignoreMetadataErrors: true);
+            }
+
+            _preserveBackupOnNextSave = false;
+            HasLoadWarning = false;
+            LoadWarning = "";
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
+    private static bool TryLoadFile(
+        string path,
+        string directory,
+        out QqListenerSettings settings)
+    {
+        settings = null!;
+        if (!File.Exists(path)) return false;
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            settings = JsonSerializer.Deserialize<QqListenerSettings>(json)
+                       ?? throw new JsonException("设置内容为空。");
+            settings.SettingsDirectory = directory;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }

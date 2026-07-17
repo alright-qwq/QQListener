@@ -18,6 +18,7 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
     private readonly QqListenerDiagnosticsState _diagnostics;
     private readonly QqListenerPluginInfo _pluginInfo;
     private readonly bool _autoSaveEnabled;
+    private readonly QqListenerSettingsPersistenceCoordinator? _persistenceCoordinator;
     private DispatcherTimer? _saveTimer;
     private bool _providerAvailableCache;
     private bool _providerProbed;
@@ -74,33 +75,44 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
 
         if (_autoSaveEnabled)
         {
-            _settings.PropertyChanged += OnSettingsPropertyChanged;
+            _persistenceCoordinator = new QqListenerSettingsPersistenceCoordinator(
+                _settings,
+                _diagnostics,
+                OnSettingsPropertyChanged);
         }
     }
 
-    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnSettingsPropertyChanged(PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(QqListenerSettings.IsEnabled))
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanPoll)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanReplay)));
         }
-        DebounceSave();
+
+        if (_persistenceCoordinator?.IsDirty == true)
+        {
+            DebounceSave();
+        }
+    }
+
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _persistenceCoordinator?.Attach();
     }
 
     protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
     {
-        base.OnDetachedFromVisualTree(e);
-        if (_autoSaveEnabled)
-        {
-            _settings.PropertyChanged -= OnSettingsPropertyChanged;
-        }
+        _persistenceCoordinator?.Detach();
         if (_saveTimer != null)
         {
             _saveTimer.Stop();
             _saveTimer.Tick -= OnSaveTimerTick;
             _saveTimer = null;
         }
+
+        base.OnDetachedFromVisualTree(e);
     }
 
     private void DebounceSave()
@@ -118,9 +130,7 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
     private void OnSaveTimerTick(object? sender, EventArgs e)
     {
         _saveTimer?.Stop();
-        if (_settings.SuppressAutoSave) return;
-        _settings.Normalize();
-        _settings.Save();
+        _persistenceCoordinator?.SavePendingSettings();
     }
 
     // ===== 快捷操作 按钮 handlers =====

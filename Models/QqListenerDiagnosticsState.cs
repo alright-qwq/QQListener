@@ -131,6 +131,11 @@ public partial class QqListenerDiagnosticsState : ObservableObject
         LastErrorSummary = $"{DateTimeOffset.Now:HH:mm:ss} {context}: {exception.Message}";
     }
 
+    public void RecordSettingsWarning(string warning)
+    {
+        LastErrorSummary = $"{DateTimeOffset.Now:HH:mm:ss} 设置恢复: {warning}";
+    }
+
     public void ClearError()
     {
         LastErrorSummary = "暂无";

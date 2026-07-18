@@ -7,16 +7,19 @@ riderModule.iml
 
 # IDE
 .idea/
+*.DotSettings.user
 
 # Claude Code local settings
 .claude/settings.local.json
 
 # Stakpak session files
 .stakpak/session*
+.stakpak/data/
 
 # Build artifacts
 cipx/
 .avalonia-build-tasks/
+TestResults/
 *.md5sum
 generate-md5.ps1
 

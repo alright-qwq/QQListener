@@ -24,6 +24,21 @@ QQListener 是一个由 PySide6 平台移植而来的 ClassIsland 插件，用�
 - 开启“仅处理 QQ 通知”时，只接受身份明确属于 QQ 的通知。关闭该选项时，也只会放行身份明确的非 QQ 通知，身份为空或未知的通知仍会被拒绝。
 - 关闭监听会立即丢弃在途轮询结果，并清空缓存的最后一条消息，防止之后通过重播功能再次显示旧的私人内容。
 
+## 开发与发布
+
+在仓库根目录依次执行以下命令，可完成锁定依赖还原、Release 构建、测试、样例校验、CIPX 打包和发布产物校验：
+
+```powershell
+dotnet restore QQListener.sln --locked-mode
+dotnet build QQListener.sln --configuration Release --no-restore
+dotnet test QQListener.sln --configuration Release --no-build
+dotnet run --project Samples/QQListener.SampleVerifier/QQListener.SampleVerifier.csproj --configuration Release --no-build
+dotnet build QQListener.csproj --configuration Release --no-restore -p:CreateCipx=true
+dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build -- --root . --configuration Release
+```
+
+现有标签 `1.0.2.0` 指向一个清单版本为 `1.0.1.0` 的历史提交，不得强制移动该标签。后续发布必须先同时递增 `manifest.yml` 中的版本和 `QQListenerVersion`，再创建新的四段式版本标签。
+
 ## 说明
 
 - 原作者是B站@BSOD-MEMZ，github原仓库：https://github.com/BSOD-MEMZ/QQListener

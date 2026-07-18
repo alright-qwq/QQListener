@@ -1,0 +1,66 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ['[0-9]*.[0-9]*.[0-9]*.[0-9]*']
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Restore locked dependencies
+        run: dotnet restore QQListener.sln --locked-mode
+
+      - name: Build release
+        run: dotnet build QQListener.sln --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
+
+      - name: Run tests
+        run: dotnet test QQListener.sln --configuration Release --no-build --no-restore --results-directory Tests/QQListener.Tests/TestResults --logger "trx;LogFileName=tests.trx"
+
+      - name: Verify toast samples
+        run: dotnet run --project Samples/QQListener.SampleVerifier/QQListener.SampleVerifier.csproj --configuration Release --no-build --no-restore
+
+      - name: Verify branch metadata
+        if: github.ref_type != 'tag'
+        run: dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build --no-restore -- --root . --configuration Release --metadata-only
+
+      - name: Verify tagged metadata
+        if: github.ref_type == 'tag'
+        run: dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build --no-restore -- --root . --configuration Release --metadata-only --tag "${{ github.ref_name }}"
+
+      - name: Build CIPX
+        run: dotnet build QQListener.csproj --configuration Release --no-restore -p:CreateCipx=true -p:ContinuousIntegrationBuild=true
+
+      - name: Verify branch package
+        if: github.ref_type != 'tag'
+        run: dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build --no-restore -- --root . --configuration Release
+
+      - name: Verify tagged package
+        if: github.ref_type == 'tag'
+        run: dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build --no-restore -- --root . --configuration Release --tag "${{ github.ref_name }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QQListener-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            cipx/QQListener.cipx
+            cipx/checksums.md
+            Tests/QQListener.Tests/TestResults/tests.trx

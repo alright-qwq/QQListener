@@ -228,11 +228,11 @@ public sealed class ReleaseMetadataVerifierTests
             bool corruptEmbeddedDll)
         {
             const string manifest =
-                "id: QQListener\nversion: 1.0.2.0\nentranceAssembly: QQListener.dll\n";
+                "id: QQListener\nversion: 1.0.3.0\nentranceAssembly: QQListener.dll\n";
             System.IO.File.WriteAllText(File("manifest.yml"), manifest);
             System.IO.File.WriteAllText(
                 File("Directory.Build.props"),
-                "<Project><PropertyGroup><QQListenerVersion>1.0.2.0</QQListenerVersion></PropertyGroup></Project>");
+                "<Project><PropertyGroup><QQListenerVersion>1.0.3.0</QQListenerVersion></PropertyGroup></Project>");
 
             var buildDirectory = File(System.IO.Path.Combine(
                 "bin",

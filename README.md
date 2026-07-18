@@ -39,6 +39,13 @@ dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier
 
 现有标签 `1.0.2.0` 指向一个清单版本为 `1.0.1.0` 的历史提交，不得强制移动该标签。后续发布必须先同时递增 `manifest.yml` 中的版本和 `QQListenerVersion`，再创建新的四段式版本标签。
 
+## 1.0.3.0 变更内容
+
+- 强化 NT QQ 通知身份识别，拒绝身份为空或未知的通知。
+- 修复监听停止、权限恢复、并发轮询和旧消息重播相关问题。
+- 改进设置原子保存、冷却时间处理和诊断信息隐私脱敏。
+- 增加完整自动化测试、通知样例校验和 CIPX 发布产物校验。
+
 ## 说明
 
 - 原作者是B站@BSOD-MEMZ，github原仓库：https://github.com/BSOD-MEMZ/QQListener

@@ -115,7 +115,8 @@ public sealed class QqNotificationPoller(
                     {
                         diagnostics.RecordFormatWarning(parseReason);
                         logger.LogWarning(
-                            "QQ Toast 格式未知，已使用降级解析。TextLines={TextLines}",
+                            "QQ Toast 格式未知，已使用降级解析。Reason={Reason} TextLines={TextLines}",
+                            parseReason,
                             snapshot.Texts.Count);
                     }
 

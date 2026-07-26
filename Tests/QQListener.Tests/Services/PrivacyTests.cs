@@ -75,7 +75,7 @@ public sealed class PrivacyTests
     }
 
     [Fact]
-    public async Task PollerLogsNeverContainAcceptedSenderOrBody()
+    public async Task PollerDegradedWarningIncludesFixedReasonWithoutPrivateContent()
     {
         var settings = Settings();
         settings.ImportantPersonsText = "";
@@ -95,7 +95,7 @@ public sealed class PrivacyTests
                 "QQ",
                 "Tencent.QQNT",
                 true,
-                ["secret-sender: private-body"])));
+                ["private-body"])));
         var poller = new QqNotificationPoller(
             settings,
             reader,
@@ -108,7 +108,11 @@ public sealed class PrivacyTests
         var result = await poller.PollAsync(false, default);
 
         Assert.Single(result.AcceptedEvents);
-        AssertRedacted(pollerLogger.Entries.Concat(pipelineLogger.Entries));
+        var logEntries = pollerLogger.Entries.Concat(pipelineLogger.Entries).ToArray();
+        Assert.Contains(
+            logEntries,
+            entry => entry.Contains("Reason=未知格式，已降级解析", StringComparison.Ordinal));
+        AssertRedacted(logEntries);
     }
 
     private static QqListenerSettings Settings() => new()
@@ -152,7 +156,7 @@ public sealed class PrivacyTests
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) =>
-            logLevel is LogLevel.Debug or LogLevel.Information;
+            logLevel is LogLevel.Debug or LogLevel.Information or LogLevel.Warning;
 
         public void Log<TState>(
             LogLevel logLevel,

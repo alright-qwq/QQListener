@@ -37,6 +37,19 @@ public class QqToastMessageParserTests
     }
 
     [Fact]
+    public void ReportsDegradedForTwoLinesWithoutSeparator()
+    {
+        var ok = new QqToastMessageParser().TryParse(
+            ["Alice", "hello"], DateTimeOffset.Now,
+            out var message, out var reason, out var confidence);
+
+        Assert.True(ok);
+        Assert.NotNull(message);
+        Assert.Equal(QqToastParseConfidence.Degraded, confidence);
+        Assert.Equal("未知格式，已降级解析", reason);
+    }
+
+    [Fact]
     public void EmptyToastStillFails()
     {
         var ok = new QqToastMessageParser().TryParse(

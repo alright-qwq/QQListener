@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using QQListener.Models;
 using QQListener.Services;
 using Xunit;
@@ -206,6 +207,120 @@ public class QqListenerWorkerTests
         Assert.Equal(["hub:Normal", "dispatch:one"], order);
     }
 
+    [Fact]
+    public async Task DisableFromLatestStateCallbackDropsHubAndDispatchAndClearsState()
+    {
+        var settings = new QqListenerSettings { IsEnabled = true };
+        var latest = new LatestMessageState();
+        latest.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(LatestMessageState.HasMessage) && latest.HasMessage)
+            {
+                settings.IsEnabled = false;
+            }
+        };
+        var hub = new MessageAutomationEventHub(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageAutomationEventHub>.Instance);
+        var hubEvents = 0;
+        hub.MessageReceived += (_, _) => hubEvents++;
+        var dispatches = 0;
+        var worker = CreateWorker(
+            settings,
+            new SequencePoller(Accepted(Event("latest-callback"))),
+            latest,
+            hub: hub);
+
+        var result = await worker.PollOnceAndDispatchAsync(false, (_, _) =>
+        {
+            dispatches++;
+            return Task.CompletedTask;
+        }, default);
+
+        Assert.Empty(result.AcceptedEvents);
+        Assert.Contains("状态已改变", result.Reason, StringComparison.Ordinal);
+        Assert.Equal(0, hubEvents);
+        Assert.Equal(0, dispatches);
+        Assert.False(latest.HasMessage);
+    }
+
+    [Fact]
+    public async Task DisableFromHubCallbackPreventsUiDispatch()
+    {
+        var settings = new QqListenerSettings { IsEnabled = true };
+        var latest = new LatestMessageState();
+        var hub = new MessageAutomationEventHub(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageAutomationEventHub>.Instance);
+        var hubEvents = 0;
+        hub.MessageReceived += (_, _) =>
+        {
+            hubEvents++;
+            settings.IsEnabled = false;
+        };
+        var dispatches = 0;
+        var worker = CreateWorker(
+            settings,
+            new SequencePoller(Accepted(Event("hub-callback"))),
+            latest,
+            hub: hub);
+
+        var result = await worker.PollOnceAndDispatchAsync(false, (_, _) =>
+        {
+            dispatches++;
+            return Task.CompletedTask;
+        }, default);
+
+        Assert.Empty(result.AcceptedEvents);
+        Assert.Contains("状态已改变", result.Reason, StringComparison.Ordinal);
+        Assert.Equal(1, hubEvents);
+        Assert.Equal(0, dispatches);
+        Assert.False(latest.HasMessage);
+    }
+
+    [Fact]
+    public async Task ConcurrentPollsPreservePollHubAndDispatchOrder()
+    {
+        var order = new ConcurrentQueue<string>();
+        var poller = new OrderedBlockingPoller(order);
+        var latest = new LatestMessageState();
+        var hub = new MessageAutomationEventHub(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageAutomationEventHub>.Instance);
+        hub.MessageReceived += (_, _) => order.Enqueue("hub:" + latest.Message);
+        var worker = CreateWorker(
+            new QqListenerSettings { IsEnabled = true },
+            poller,
+            latest,
+            hub: hub);
+
+        var first = worker.PollOnceAndDispatchAsync(false, (message, _) =>
+        {
+            order.Enqueue("dispatch:" + message.Body);
+            return Task.CompletedTask;
+        }, default);
+        await poller.FirstPollStarted.WaitAsync(TimeSpan.FromSeconds(2));
+        var second = worker.PollOnceAndDispatchAsync(false, (message, _) =>
+        {
+            order.Enqueue("dispatch:" + message.Body);
+            return Task.CompletedTask;
+        }, default);
+        poller.ReleaseFirstPoll();
+
+        var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal("first", Assert.Single(results[0].AcceptedEvents).Body);
+        Assert.Equal("second", Assert.Single(results[1].AcceptedEvents).Body);
+        Assert.Equal(
+        [
+            "poll:start:first",
+            "poll:return:first",
+            "hub:first",
+            "dispatch:first",
+            "poll:start:second",
+            "poll:return:second",
+            "hub:second",
+            "dispatch:second"
+        ], order.ToArray());
+    }
+
     private static QqListenerWorker CreateWorker(
         QqListenerSettings settings,
         IQqNotificationPoller poller,
@@ -309,6 +424,41 @@ public class QqListenerWorkerTests
         public void ResetDetectionState()
         {
         }
+    }
+
+    private sealed class OrderedBlockingPoller(ConcurrentQueue<string> order)
+        : IQqNotificationPoller
+    {
+        private readonly TaskCompletionSource<bool> _firstPollStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _releaseFirstPoll =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _pollCount;
+
+        public Task FirstPollStarted => _firstPollStarted.Task;
+
+        public async Task<QqNotificationPollResult> PollAsync(
+            bool retryPermission,
+            CancellationToken cancellationToken)
+        {
+            var pollCount = Interlocked.Increment(ref _pollCount);
+            var body = pollCount == 1 ? "first" : "second";
+            order.Enqueue("poll:start:" + body);
+            if (pollCount == 1)
+            {
+                _firstPollStarted.TrySetResult(true);
+                await _releaseFirstPoll.Task.WaitAsync(cancellationToken);
+            }
+
+            order.Enqueue("poll:return:" + body);
+            return Accepted(Event(body));
+        }
+
+        public void ResetDetectionState()
+        {
+        }
+
+        public void ReleaseFirstPoll() => _releaseFirstPoll.TrySetResult(true);
     }
 
     private sealed class WakePoller : IQqNotificationPoller

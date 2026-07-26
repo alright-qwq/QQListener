@@ -12,6 +12,7 @@ public sealed class QqListenerWorker
     private readonly QqListenerDiagnosticsState _diagnostics;
     private readonly MessageAutomationEventHub _automationEventHub;
     private readonly object _stateLock = new();
+    private readonly SemaphoreSlim _pollDispatchGate = new(1, 1);
     private long _generation;
     private CancellationTokenSource _generationCancellation = new();
     private TaskCompletionSource<bool> _settingsChanged = CreateSignal();
@@ -89,6 +90,25 @@ public sealed class QqListenerWorker
         Func<MessageEvent, CancellationToken, Task> dispatchAsync,
         CancellationToken cancellationToken)
     {
+        await _pollDispatchGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await PollOnceAndDispatchCoreAsync(
+                retryPermission,
+                dispatchAsync,
+                cancellationToken);
+        }
+        finally
+        {
+            _pollDispatchGate.Release();
+        }
+    }
+
+    private async Task<QqNotificationPollResult> PollOnceAndDispatchCoreAsync(
+        bool retryPermission,
+        Func<MessageEvent, CancellationToken, Task> dispatchAsync,
+        CancellationToken cancellationToken)
+    {
         long generation;
         CancellationToken generationToken;
         lock (_stateLock)
@@ -138,7 +158,20 @@ public sealed class QqListenerWorker
                     _latestMessage.Update(message);
                 }
 
+                if (!IsGenerationCurrent(generation, generationToken))
+                {
+                    return ChangedGenerationResult();
+                }
+
+                linkedCancellation.Token.ThrowIfCancellationRequested();
                 _automationEventHub.Publish(message);
+
+                if (!IsGenerationCurrent(generation, generationToken))
+                {
+                    return ChangedGenerationResult();
+                }
+
+                linkedCancellation.Token.ThrowIfCancellationRequested();
                 await dispatchAsync(message, linkedCancellation.Token);
             }
         }
@@ -214,6 +247,16 @@ public sealed class QqListenerWorker
     public void ResetDetectionState()
     {
         _poller.ResetDetectionState();
+    }
+
+    private bool IsGenerationCurrent(long generation, CancellationToken generationToken)
+    {
+        lock (_stateLock)
+        {
+            return generation == _generation
+                   && _settings.IsEnabled
+                   && !generationToken.IsCancellationRequested;
+        }
     }
 
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)

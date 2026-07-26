@@ -115,10 +115,29 @@ public class QqNotificationPollerTests
         Assert.Equal("new", accepted.Body);
     }
 
-    private static QqNotificationPoller CreatePoller(IWindowsNotificationReader reader)
+    [Fact]
+    public async Task DegradedToastIsAcceptedAndRecordedWithoutContent()
+    {
+        var diagnostics = new QqListenerDiagnosticsState();
+        var reader = SequencedNotificationReader.Create(
+            Success(),
+            Success(Snapshot(1, "private-body")));
+        var poller = CreatePoller(reader, diagnostics);
+
+        await poller.PollAsync(false, default);
+        var result = await poller.PollAsync(false, default);
+
+        Assert.Single(result.AcceptedEvents);
+        Assert.Equal("未知格式，已降级解析", diagnostics.LastFormatSummary);
+        Assert.DoesNotContain("private-body", diagnostics.LastFormatSummary);
+    }
+
+    private static QqNotificationPoller CreatePoller(
+        IWindowsNotificationReader reader,
+        QqListenerDiagnosticsState? diagnostics = null)
     {
         var settings = new QqListenerSettings();
-        var diagnostics = new QqListenerDiagnosticsState();
+        diagnostics ??= new QqListenerDiagnosticsState();
         var evaluator = new MessageRuleEvaluator(settings);
         var pipeline = new MessageEventPipeline(
             settings,

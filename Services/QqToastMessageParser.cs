@@ -13,10 +13,19 @@ public class QqToastMessageParser
         IReadOnlyList<string> texts,
         DateTimeOffset receivedAt,
         out MessageEvent? messageEvent,
-        out string reason)
+        out string reason) =>
+        TryParse(texts, receivedAt, out messageEvent, out reason, out _);
+
+    public bool TryParse(
+        IReadOnlyList<string> texts,
+        DateTimeOffset receivedAt,
+        out MessageEvent? messageEvent,
+        out string reason,
+        out QqToastParseConfidence confidence)
     {
         var rawText = NormalizeTexts(texts);
         var contentLines = RemoveNoiseLines(rawText);
+        confidence = QqToastParseConfidence.Degraded;
         if (contentLines.Length == 0)
         {
             messageEvent = null;
@@ -27,15 +36,10 @@ public class QqToastMessageParser
         var sender = SourceDisplayName;
         var conversation = "";
         var body = "";
-
-        if (contentLines.Length == 1)
-        {
-            ParseSingleLine(contentLines[0], ref sender, ref conversation, ref body);
-        }
-        else
-        {
-            ParseMultiLine(contentLines, ref sender, ref conversation, ref body);
-        }
+        var known = contentLines.Length == 1
+            ? ParseSingleLine(contentLines[0], ref sender, ref conversation, ref body)
+            : ParseMultiLine(contentLines, ref sender, ref conversation, ref body);
+        confidence = known ? QqToastParseConfidence.Known : QqToastParseConfidence.Degraded;
 
         messageEvent = new MessageEvent(
             SourceId,
@@ -47,7 +51,7 @@ public class QqToastMessageParser
             MessageImportance.Normal,
             rawText,
             CreateDeduplicationKey(SourceId, contentLines));
-        reason = "已解析 QQ Toast";
+        reason = known ? "已解析 QQ Toast" : "未知格式，已降级解析";
         return true;
     }
 
@@ -56,19 +60,20 @@ public class QqToastMessageParser
         return TryParse(texts, receivedAt, out var messageEvent, out _) ? messageEvent : null;
     }
 
-    private static void ParseSingleLine(string text, ref string sender, ref string conversation, ref string body)
+    private static bool ParseSingleLine(string text, ref string sender, ref string conversation, ref string body)
     {
         if (TrySplitSenderAndBody(text, out var candidateSender, out var candidateBody))
         {
             SplitConversationPrefix(candidateSender, ref sender, ref conversation);
             body = candidateBody;
-            return;
+            return true;
         }
 
         body = text;
+        return false;
     }
 
-    private static void ParseMultiLine(string[] lines, ref string sender, ref string conversation, ref string body)
+    private static bool ParseMultiLine(string[] lines, ref string sender, ref string conversation, ref string body)
     {
         var lastLine = lines[^1];
         if (TrySplitSenderAndBody(lastLine, out var candidateSender, out var candidateBody))
@@ -88,7 +93,7 @@ public class QqToastMessageParser
                 body = candidateBody;
             }
 
-            return;
+            return true;
         }
 
         if (lines.Length >= 3)
@@ -96,11 +101,12 @@ public class QqToastMessageParser
             conversation = lines[0];
             sender = lines[1];
             body = string.Join(Environment.NewLine, lines[2..]);
-            return;
+            return true;
         }
 
         sender = lines[0];
         body = string.Join(Environment.NewLine, lines.Skip(1));
+        return false;
     }
 
     private static bool TrySplitSenderAndBody(string text, out string sender, out string body)

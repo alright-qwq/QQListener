@@ -306,6 +306,10 @@
                                        Header="最近忽略"
                                        Description="{Binding Diagnostics.LastIgnoredReason}" />
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE7BA;}"
+                                       Header="格式诊断"
+                                       Description="{Binding Diagnostics.LastFormatSummary}" />
+
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xEB90;}"
                                        Header="最近错误"
                                        Description="{Binding Diagnostics.LastErrorSummary}" />

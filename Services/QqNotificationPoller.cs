@@ -102,12 +102,21 @@ public sealed class QqNotificationPoller(
                             snapshot.Texts,
                             DateTimeOffset.Now,
                             out var messageEvent,
-                            out var parseReason)
+                            out var parseReason,
+                            out var confidence)
                         || messageEvent is null)
                     {
                         diagnostics.RecordIgnored(parseReason);
                         logger.LogDebug("跳过无法解析的通知: {Reason}", parseReason);
                         continue;
+                    }
+
+                    if (confidence == QqToastParseConfidence.Degraded)
+                    {
+                        diagnostics.RecordFormatWarning(parseReason);
+                        logger.LogWarning(
+                            "QQ Toast 格式未知，已使用降级解析。TextLines={TextLines}",
+                            snapshot.Texts.Count);
                     }
 
                     var processResult = pipeline.Process(messageEvent);

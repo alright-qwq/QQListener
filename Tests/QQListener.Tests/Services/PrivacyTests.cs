@@ -69,6 +69,7 @@ public sealed class PrivacyTests
             logger.Entries
                 .Append(diagnostics.LastAcceptedSummary)
                 .Append(diagnostics.LastIgnoredReason)
+                .Append(diagnostics.LastFormatSummary)
                 .Append(accepted.Reason)
                 .Append(ignored.Reason));
     }

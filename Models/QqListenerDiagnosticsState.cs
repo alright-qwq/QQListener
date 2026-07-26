@@ -38,6 +38,9 @@ public partial class QqListenerDiagnosticsState : ObservableObject
     private string _lastIgnoredReason = "暂无";
 
     [ObservableProperty]
+    private string _lastFormatSummary = "暂无";
+
+    [ObservableProperty]
     private string _lastErrorSummary = "暂无";
 
     [ObservableProperty]
@@ -124,6 +127,11 @@ public partial class QqListenerDiagnosticsState : ObservableObject
     public void RecordIgnored(string reason)
     {
         LastIgnoredReason = string.IsNullOrWhiteSpace(reason) ? "未知原因" : reason;
+    }
+
+    public void RecordFormatWarning(string reason)
+    {
+        LastFormatSummary = string.IsNullOrWhiteSpace(reason) ? "未知格式" : reason;
     }
 
     public void RecordError(Exception exception, string context)

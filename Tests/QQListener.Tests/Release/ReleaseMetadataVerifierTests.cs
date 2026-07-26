@@ -378,8 +378,10 @@ public sealed class ReleaseMetadataVerifierTests
     public void CleanupFailureIsReported()
     {
         using var fixture = ReleaseFixture.Create();
-        var temporaryDirectory = fixture.File("locked-cleanup");
+        var protectedParentDirectory = fixture.File("locked-cleanup-parent");
+        var temporaryDirectory = Path.Combine(protectedParentDirectory, "extraction");
         FileStream? lockStream = null;
+        UnixFileMode? originalParentMode = null;
 
         try
         {
@@ -387,11 +389,25 @@ public sealed class ReleaseMetadataVerifierTests
                 () =>
                 {
                     Directory.CreateDirectory(temporaryDirectory);
-                    lockStream = new FileStream(
-                        Path.Combine(temporaryDirectory, "locked.tmp"),
-                        FileMode.CreateNew,
-                        FileAccess.ReadWrite,
-                        FileShare.None);
+                    if (OperatingSystem.IsWindows())
+                    {
+                        lockStream = new FileStream(
+                            Path.Combine(temporaryDirectory, "locked.tmp"),
+                            FileMode.CreateNew,
+                            FileAccess.ReadWrite,
+                            FileShare.None);
+                    }
+                    else
+                    {
+                        originalParentMode = File.GetUnixFileMode(protectedParentDirectory);
+                        File.SetUnixFileMode(
+                            protectedParentDirectory,
+                            originalParentMode.Value
+                            & ~(UnixFileMode.UserWrite
+                                | UnixFileMode.GroupWrite
+                                | UnixFileMode.OtherWrite));
+                    }
+
                     return temporaryDirectory;
                 },
                 () =>
@@ -405,9 +421,21 @@ public sealed class ReleaseMetadataVerifierTests
         finally
         {
             lockStream?.Dispose();
+            if (!OperatingSystem.IsWindows()
+                && originalParentMode is not null
+                && Directory.Exists(protectedParentDirectory))
+            {
+                File.SetUnixFileMode(protectedParentDirectory, originalParentMode.Value);
+            }
+
             if (Directory.Exists(temporaryDirectory))
             {
                 Directory.Delete(temporaryDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(protectedParentDirectory))
+            {
+                Directory.Delete(protectedParentDirectory);
             }
         }
     }

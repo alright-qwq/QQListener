@@ -33,6 +33,29 @@ public sealed class MessageAutomationEventHubTests
         Assert.Equal(0, received);
     }
 
+    [Fact]
+    public void SubscriberFailureLogContainsTypesButNoPrivatePayloadOrExceptionMessage()
+    {
+        var logger = new RecordingLogger<MessageAutomationEventHub>();
+        var hub = new MessageAutomationEventHub(logger);
+        hub.MessageReceived += (_, _) =>
+            throw new InvalidOperationException("secret-exception-message");
+
+        hub.Publish(new MessageEvent(
+            "secret-source", "QQ", "secret-sender", "secret-conversation",
+            "private-body", DateTimeOffset.Parse("2026-07-26T00:00:00Z"),
+            MessageImportance.Important, ["secret-sender", "private-body"],
+            "secret-deduplication-key"));
+
+        var text = Assert.Single(logger.Messages);
+        Assert.Contains(typeof(InvalidOperationException).FullName!, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-exception-message", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-sender", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-conversation", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-body", text, StringComparison.Ordinal);
+        Assert.All(logger.Exceptions, exception => Assert.Null(exception));
+    }
+
     private static MessageEvent Event(MessageImportance importance) => new(
         "qq.toast",
         "QQ",
@@ -43,4 +66,18 @@ public sealed class MessageAutomationEventHubTests
         importance,
         ["Alice", "message"],
         "qq.toast:message");
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+        public List<Exception?> Exceptions { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state,
+            Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+            Exceptions.Add(exception);
+        }
+    }
 }

@@ -159,6 +159,32 @@ public class QqListenerWorkerTests
     }
 
     [Fact]
+    public async Task ReplayLatestDoesNotPublishAutomationEvent()
+    {
+        var latest = new LatestMessageState();
+        latest.Update(Event("private-replay"));
+        var hub = new MessageAutomationEventHub(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageAutomationEventHub>.Instance);
+        var published = 0;
+        hub.MessageReceived += (_, _) => published++;
+        var worker = CreateWorker(
+            new QqListenerSettings { IsEnabled = true },
+            new SequencePoller(Accepted()),
+            latest,
+            hub: hub);
+        var dispatched = 0;
+
+        await worker.ReplayLatestAsync((_, showIfCurrent, _) =>
+        {
+            showIfCurrent(() => dispatched++);
+            return Task.CompletedTask;
+        }, default);
+
+        Assert.Equal(1, dispatched);
+        Assert.Equal(0, published);
+    }
+
+    [Fact]
     public async Task AcceptedPollEventPublishesOnceBeforeDispatch()
     {
         var order = new List<string>();

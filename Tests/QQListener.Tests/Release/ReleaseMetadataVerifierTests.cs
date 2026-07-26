@@ -1,5 +1,7 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using QQListener.ReleaseVerifier;
 using Xunit;
 
@@ -7,6 +9,11 @@ namespace QQListener.Tests.Release;
 
 public sealed class ReleaseMetadataVerifierTests
 {
+    private const int MaximumArchiveEntries = 1024;
+    private const long MaximumExpandedBytes = 256L * 1024 * 1024;
+    private const int MaximumManifestBytes = 1024 * 1024;
+    private const long MaximumDllBytes = 128L * 1024 * 1024;
+
     [Fact]
     public void DetectsManifestAndProjectVersionMismatch()
     {
@@ -121,21 +128,342 @@ public sealed class ReleaseMetadataVerifierTests
             error.Contains("project", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Theory]
-    [InlineData("subdir/manifest.yml")]
-    [InlineData("MANIFEST.YML")]
-    [InlineData("nested.cipx")]
-    [InlineData("checksums.md")]
-    [InlineData("../escape.txt")]
-    public void UnsafeOrReservedArchiveEntriesAreRejected(string entryName)
+    [Fact]
+    public void PackageRequiresEveryVersionToBe1100()
     {
-        using var fixture = ReleaseFixture.Create(extraEntryName: entryName);
+        using var fixture = ReleaseFixture.Create(
+            version: "1.0.0.0",
+            embeddedDllPath: typeof(ReleaseMetadataVerifier).Assembly.Location);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        foreach (var source in new[] { "manifest", "project", "assembly", "file" })
+        {
+            Assert.Contains(result.Errors, error =>
+                error.Contains(source, StringComparison.OrdinalIgnoreCase)
+                && error.Contains("required release version", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Theory]
+    [InlineData("manifest.yml")]
+    [InlineData("QQListener.dll")]
+    [InlineData("README.md")]
+    [InlineData("CHANGELOG.md")]
+    [InlineData("icon.png")]
+    public void PackageRequiresCleanInstallRootFiles(string missing)
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.RebuildArchive(excludedEntry: missing);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error => error.Contains(missing, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("../escape.dll")]
+    [InlineData("nested/../../escape.dll")]
+    [InlineData("/absolute.dll")]
+    [InlineData("C:/drive.dll")]
+    [InlineData("nested//empty.dll")]
+    [InlineData("./relative.dll")]
+    [InlineData("nested/./relative.dll")]
+    [InlineData("nested\\backslash.dll")]
+    [InlineData("nested/contains\0nul.dll")]
+    public void PackageRejectsNonCanonicalArchivePaths(string entryName)
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(entryName, "malicious")]);
 
         var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
 
         Assert.False(result.Success);
         Assert.Contains(result.Errors, error =>
-            error.Contains("archive", StringComparison.OrdinalIgnoreCase));
+            error.Contains("safe relative path", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("subdir/manifest.yml")]
+    [InlineData("MANIFEST.YML")]
+    [InlineData("subdir/QQListener.dll")]
+    [InlineData("qqlistener.DLL")]
+    [InlineData("subdir/README.md")]
+    [InlineData("readme.MD")]
+    [InlineData("subdir/CHANGELOG.md")]
+    [InlineData("changelog.MD")]
+    [InlineData("subdir/icon.png")]
+    [InlineData("ICON.PNG")]
+    public void PackageRejectsReservedFilesOutsideTheirExactRootNames(string entryName)
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(entryName, "reserved")]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("exact root-level name", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("nested/package.cipx")]
+    [InlineData("nested/checksums.md")]
+    [InlineData("nested/package.md5")]
+    [InlineData("nested/package.md5sum")]
+    public void PackageRejectsNestedOrGeneratedArtifacts(string entryName)
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(entryName, "generated")]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("nested or generated artifact", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PackageRejectsCaseInsensitiveDuplicatePaths()
+    {
+        using var fixture = ReleaseFixture.Create(extraEntries:
+        [
+            new ArchiveItem("assets/value.txt", "first"),
+            new ArchiveItem("ASSETS/VALUE.TXT", "second")
+        ]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("case-insensitive", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("assets", "assets/icon.txt")]
+    [InlineData("assets/icon.txt", "ASSETS")]
+    [InlineData("README.md/child.txt", "other.txt")]
+    public void PackageRejectsFileDirectoryCollisions(string first, string second)
+    {
+        using var fixture = ReleaseFixture.Create(extraEntries:
+        [
+            new ArchiveItem(first, "first"),
+            new ArchiveItem(second, "second")
+        ]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("file-directory collision", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ScanFailureDoesNotCreateTemporaryDirectory()
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem("../escape.dll", "malicious")]);
+        var factoryCalls = 0;
+
+        WithTemporaryDirectoryFactory(
+            () =>
+            {
+                factoryCalls++;
+                throw new InvalidOperationException("factory must not be called");
+            },
+            () =>
+            {
+                var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                Assert.False(result.Success);
+            });
+
+        Assert.Equal(0, factoryCalls);
+    }
+
+    [Fact]
+    public void ValidPackageCleansTemporaryDirectory()
+    {
+        using var fixture = ReleaseFixture.Create();
+        var temporaryDirectory = fixture.File("successful-extraction");
+
+        WithTemporaryDirectoryFactory(
+            () => CreateDirectory(temporaryDirectory),
+            () =>
+            {
+                var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+            });
+
+        Assert.False(Directory.Exists(temporaryDirectory));
+    }
+
+    [Fact]
+    public void InvalidDllCleansTemporaryDirectory()
+    {
+        using var fixture = ReleaseFixture.Create(corruptEmbeddedDll: true);
+        var temporaryDirectory = fixture.File("failed-extraction");
+
+        WithTemporaryDirectoryFactory(
+            () => CreateDirectory(temporaryDirectory),
+            () =>
+            {
+                var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                Assert.False(result.Success);
+            });
+
+        Assert.False(Directory.Exists(temporaryDirectory));
+    }
+
+    [Fact]
+    public void ExtractionFailureCleansTemporaryDirectory()
+    {
+        using var fixture = ReleaseFixture.Create();
+        var temporaryDirectory = fixture.File("create-new-collision");
+
+        WithTemporaryDirectoryFactory(
+            () =>
+            {
+                Directory.CreateDirectory(temporaryDirectory);
+                File.WriteAllText(Path.Combine(temporaryDirectory, "README.md"), "pre-existing");
+                return temporaryDirectory;
+            },
+            () =>
+            {
+                var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                Assert.False(result.Success);
+            });
+
+        Assert.False(Directory.Exists(temporaryDirectory));
+    }
+
+    [Fact]
+    public void CleanupFailureIsReported()
+    {
+        using var fixture = ReleaseFixture.Create();
+        var temporaryDirectory = fixture.File("locked-cleanup");
+        FileStream? lockStream = null;
+
+        try
+        {
+            WithTemporaryDirectoryFactory(
+                () =>
+                {
+                    Directory.CreateDirectory(temporaryDirectory);
+                    lockStream = new FileStream(
+                        Path.Combine(temporaryDirectory, "locked.tmp"),
+                        FileMode.CreateNew,
+                        FileAccess.ReadWrite,
+                        FileShare.None);
+                    return temporaryDirectory;
+                },
+                () =>
+                {
+                    var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                    Assert.False(result.Success);
+                    Assert.Contains(result.Errors, error =>
+                        error.Contains("cleanup", StringComparison.OrdinalIgnoreCase));
+                });
+        }
+        finally
+        {
+            lockStream?.Dispose();
+            if (Directory.Exists(temporaryDirectory))
+            {
+                Directory.Delete(temporaryDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ManifestAtSizeLimitIsAccepted()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.RebuildArchive(manifestOverride: ManifestWithExactSize(MaximumManifestBytes));
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+    }
+
+    [Fact]
+    public void ManifestOverSizeLimitIsRejectedBeforeExtraction()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.RebuildArchive(manifestOverride: ManifestWithExactSize(MaximumManifestBytes + 1));
+        AssertScanRejectsBeforeExtraction(fixture);
+    }
+
+    [Fact]
+    public void DllAtSizeLimitPassesDirectoryAudit()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.SetClaimedUncompressedLength("QQListener.dll", MaximumDllBytes);
+        AssertDirectoryAuditCreatesTemporaryDirectory(fixture);
+    }
+
+    [Fact]
+    public void DllOverSizeLimitIsRejectedBeforeExtraction()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.SetClaimedUncompressedLength("QQListener.dll", MaximumDllBytes + 1);
+        AssertScanRejectsBeforeExtraction(fixture);
+    }
+
+    [Fact]
+    public void ArchiveAtEntryCountLimitIsAccepted()
+    {
+        var extras = Enumerable.Range(0, MaximumArchiveEntries - 5)
+            .Select(index => new ArchiveItem($"assets/{index:D4}.txt", string.Empty))
+            .ToArray();
+        using var fixture = ReleaseFixture.Create(extraEntries: extras);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+    }
+
+    [Fact]
+    public void ArchiveOverEntryCountLimitIsRejectedBeforeExtraction()
+    {
+        var extras = Enumerable.Range(0, MaximumArchiveEntries - 4)
+            .Select(index => new ArchiveItem($"assets/{index:D4}.txt", string.Empty))
+            .ToArray();
+        using var fixture = ReleaseFixture.Create(extraEntries: extras);
+        AssertScanRejectsBeforeExtraction(fixture);
+    }
+
+    [Fact]
+    public void ArchiveAtExpandedSizeLimitPassesDirectoryAudit()
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem("payload.bin", "x")]);
+        fixture.SetTotalClaimedUncompressedLength("payload.bin", MaximumExpandedBytes);
+        AssertDirectoryAuditCreatesTemporaryDirectory(fixture);
+    }
+
+    [Fact]
+    public void ArchiveOverExpandedSizeLimitIsRejectedBeforeExtraction()
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem("payload.bin", "x")]);
+        fixture.SetTotalClaimedUncompressedLength("payload.bin", MaximumExpandedBytes + 1);
+        AssertScanRejectsBeforeExtraction(fixture);
+    }
+
+    [Fact]
+    public void ArchiveErrorsDoNotExposeManifestContents()
+    {
+        const string secret = "TOP-SECRET-MANIFEST-CONTENT";
+        using var fixture = ReleaseFixture.Create();
+        fixture.RebuildArchive(manifestOverride:
+            $"id: QQListener\nversion: {secret}\nentranceAssembly: QQListener.dll\n");
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.DoesNotContain(result.Errors, error => error.Contains(secret, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -147,33 +475,6 @@ public sealed class ReleaseMetadataVerifierTests
 
         Assert.Contains(result.Errors, error =>
             error.Contains("checksum", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public void CorruptEmbeddedDllCleansTemporaryDirectory()
-    {
-        using var fixture = ReleaseFixture.Create(corruptEmbeddedDll: true);
-        var tempRoot = fixture.File("temp");
-        Directory.CreateDirectory(tempRoot);
-        var previousFactory = ReleaseMetadataVerifier.TemporaryDirectoryFactory;
-        ReleaseMetadataVerifier.TemporaryDirectoryFactory = () =>
-        {
-            var path = System.IO.Path.Combine(tempRoot, Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(path);
-            return path;
-        };
-
-        try
-        {
-            var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
-
-            Assert.False(result.Success);
-            Assert.Empty(Directory.GetDirectories(tempRoot));
-        }
-        finally
-        {
-            ReleaseMetadataVerifier.TemporaryDirectoryFactory = previousFactory;
-        }
     }
 
     [Fact]
@@ -191,30 +492,220 @@ public sealed class ReleaseMetadataVerifierTests
         Assert.NotEmpty(error.ToString());
     }
 
+    private static void AssertScanRejectsBeforeExtraction(ReleaseFixture fixture)
+    {
+        var factoryCalls = 0;
+        WithTemporaryDirectoryFactory(
+            () =>
+            {
+                factoryCalls++;
+                throw new InvalidOperationException("factory must not be called");
+            },
+            () =>
+            {
+                var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                Assert.False(result.Success);
+            });
+        Assert.Equal(0, factoryCalls);
+    }
+
+    private static void AssertDirectoryAuditCreatesTemporaryDirectory(ReleaseFixture fixture)
+    {
+        var temporaryDirectory = fixture.File($"boundary-{Guid.NewGuid():N}");
+        var factoryCalls = 0;
+        WithTemporaryDirectoryFactory(
+            () =>
+            {
+                factoryCalls++;
+                return CreateDirectory(temporaryDirectory);
+            },
+            () => ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release"));
+        Assert.Equal(1, factoryCalls);
+        Assert.False(Directory.Exists(temporaryDirectory));
+    }
+
+    private static string ManifestWithExactSize(int size)
+    {
+        const string prefix =
+            "id: QQListener\nversion: 1.1.0.0\nentranceAssembly: QQListener.dll\n#";
+        Assert.True(prefix.Length <= size);
+        return prefix + new string('x', size - prefix.Length);
+    }
+
+    private static string CreateDirectory(string path)
+    {
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static void WithTemporaryDirectoryFactory(Func<string> factory, Action action)
+    {
+        var previousFactory = ReleaseMetadataVerifier.TemporaryDirectoryFactory;
+        ReleaseMetadataVerifier.TemporaryDirectoryFactory = factory;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            ReleaseMetadataVerifier.TemporaryDirectoryFactory = previousFactory;
+        }
+    }
+
+    private sealed record ArchiveItem(string Name, string Content);
+
     private sealed class ReleaseFixture : IDisposable
     {
-        private ReleaseFixture(string path)
+        private readonly string _buildDll;
+        private readonly string _manifest;
+        private readonly IReadOnlyList<ArchiveItem> _extraEntries;
+        private readonly bool _corruptEmbeddedDll;
+
+        private ReleaseFixture(
+            string path,
+            string buildDll,
+            string manifest,
+            IReadOnlyList<ArchiveItem> extraEntries,
+            bool corruptEmbeddedDll)
         {
             Path = path;
+            _buildDll = buildDll;
+            _manifest = manifest;
+            _extraEntries = extraEntries;
+            _corruptEmbeddedDll = corruptEmbeddedDll;
         }
 
         public string Path { get; }
 
-        public string File(string relativePath) =>
-            System.IO.Path.Combine(Path, relativePath);
+        private string CipxPath => File(System.IO.Path.Combine("cipx", "QQListener.cipx"));
+
+        public string File(string relativePath) => System.IO.Path.Combine(Path, relativePath);
 
         public static ReleaseFixture Create(
-            string? extraEntryName = null,
+            IReadOnlyList<ArchiveItem>? extraEntries = null,
             string? checksumOverride = null,
-            bool corruptEmbeddedDll = false)
+            bool corruptEmbeddedDll = false,
+            string version = "1.1.0.0",
+            string? embeddedDllPath = null)
         {
             var path = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 $"QQListener.ReleaseVerifier.Tests.{Guid.NewGuid():N}");
             Directory.CreateDirectory(path);
-            var fixture = new ReleaseFixture(path);
-            fixture.WriteProjectFiles(extraEntryName, checksumOverride, corruptEmbeddedDll);
+            var manifest =
+                $"id: QQListener\nversion: {version}\nentranceAssembly: QQListener.dll\n";
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(path, "manifest.yml"),
+                manifest);
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(path, "Directory.Build.props"),
+                $"<Project><PropertyGroup><QQListenerVersion>{version}</QQListenerVersion></PropertyGroup></Project>");
+
+            var buildDirectory = System.IO.Path.Combine(
+                path,
+                "bin",
+                "Release",
+                "net8.0-windows10.0.19041.0");
+            Directory.CreateDirectory(buildDirectory);
+            var buildDll = System.IO.Path.Combine(buildDirectory, "QQListener.dll");
+            System.IO.File.Copy(embeddedDllPath ?? typeof(Plugin).Assembly.Location, buildDll);
+
+            Directory.CreateDirectory(System.IO.Path.Combine(path, "cipx"));
+            var fixture = new ReleaseFixture(
+                path,
+                buildDll,
+                manifest,
+                extraEntries ?? [],
+                corruptEmbeddedDll);
+            fixture.RebuildArchive(checksumOverride: checksumOverride);
             return fixture;
+        }
+
+        public void RebuildArchive(
+            string? excludedEntry = null,
+            string? manifestOverride = null,
+            string? checksumOverride = null)
+        {
+            if (System.IO.File.Exists(CipxPath))
+            {
+                System.IO.File.Delete(CipxPath);
+            }
+
+            using (var archive = ZipFile.Open(CipxPath, ZipArchiveMode.Create))
+            {
+                var manifest = manifestOverride ?? _manifest;
+                WriteRequiredText(archive, "manifest.yml", manifest, excludedEntry);
+                if (!string.Equals(excludedEntry, "QQListener.dll", StringComparison.Ordinal))
+                {
+                    var dllEntry = archive.CreateEntry("QQListener.dll");
+                    using var output = dllEntry.Open();
+                    if (_corruptEmbeddedDll)
+                    {
+                        output.Write("not-a-dll"u8);
+                    }
+                    else
+                    {
+                        using var input = System.IO.File.OpenRead(_buildDll);
+                        input.CopyTo(output);
+                    }
+                }
+
+                WriteRequiredText(archive, "README.md", "# QQListener\n", excludedEntry);
+                WriteRequiredText(archive, "CHANGELOG.md", "# Changelog\n", excludedEntry);
+                WriteRequiredText(archive, "icon.png", "png", excludedEntry);
+                foreach (var item in _extraEntries)
+                {
+                    WriteEntry(archive, item.Name, item.Content);
+                }
+            }
+
+            WriteChecksum(checksumOverride);
+        }
+
+        public void SetClaimedUncompressedLength(string entryName, long length)
+        {
+            Assert.InRange(length, 0, uint.MaxValue);
+            var bytes = System.IO.File.ReadAllBytes(CipxPath);
+            var updated = false;
+            for (var offset = 0; offset <= bytes.Length - 46; offset++)
+            {
+                if (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4)) != 0x02014b50)
+                {
+                    continue;
+                }
+
+                var fileNameLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 28, 2));
+                var extraLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 30, 2));
+                var commentLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 32, 2));
+                var name = Encoding.UTF8.GetString(bytes, offset + 46, fileNameLength);
+                if (string.Equals(name, entryName, StringComparison.Ordinal))
+                {
+                    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 24, 4), checked((uint)length));
+                    var localOffset = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset + 42, 4)));
+                    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(localOffset + 22, 4), checked((uint)length));
+                    updated = true;
+                    break;
+                }
+
+                offset += 45 + fileNameLength + extraLength + commentLength;
+            }
+
+            Assert.True(updated, $"Unable to find ZIP entry '{entryName}'.");
+            System.IO.File.WriteAllBytes(CipxPath, bytes);
+            WriteChecksum(checksumOverride: null);
+        }
+
+        public void SetTotalClaimedUncompressedLength(string entryName, long totalLength)
+        {
+            long otherLength;
+            using (var archive = ZipFile.OpenRead(CipxPath))
+            {
+                otherLength = archive.Entries
+                    .Where(entry => !string.Equals(entry.FullName, entryName, StringComparison.Ordinal))
+                    .Sum(entry => entry.Length);
+            }
+
+            SetClaimedUncompressedLength(entryName, totalLength - otherLength);
         }
 
         public void Dispose()
@@ -222,63 +713,31 @@ public sealed class ReleaseMetadataVerifierTests
             Directory.Delete(Path, recursive: true);
         }
 
-        private void WriteProjectFiles(
-            string? extraEntryName,
-            string? checksumOverride,
-            bool corruptEmbeddedDll)
+        private static void WriteRequiredText(
+            ZipArchive archive,
+            string name,
+            string content,
+            string? excludedEntry)
         {
-            const string manifest =
-                "id: QQListener\nversion: 1.1.0.0\nentranceAssembly: QQListener.dll\n";
-            System.IO.File.WriteAllText(File("manifest.yml"), manifest);
-            System.IO.File.WriteAllText(
-                File("Directory.Build.props"),
-                "<Project><PropertyGroup><QQListenerVersion>1.1.0.0</QQListenerVersion></PropertyGroup></Project>");
-
-            var buildDirectory = File(System.IO.Path.Combine(
-                "bin",
-                "Release",
-                "net8.0-windows10.0.19041.0"));
-            Directory.CreateDirectory(buildDirectory);
-            var buildDll = System.IO.Path.Combine(buildDirectory, "QQListener.dll");
-            System.IO.File.Copy(typeof(Plugin).Assembly.Location, buildDll);
-
-            var cipxDirectory = File("cipx");
-            Directory.CreateDirectory(cipxDirectory);
-            var cipxPath = System.IO.Path.Combine(cipxDirectory, "QQListener.cipx");
-            using (var archive = ZipFile.Open(cipxPath, ZipArchiveMode.Create))
+            if (!string.Equals(excludedEntry, name, StringComparison.Ordinal))
             {
-                WriteEntry(archive, "manifest.yml", manifest);
-                var dllEntry = archive.CreateEntry("QQListener.dll");
-                using (var output = dllEntry.Open())
-                {
-                    if (corruptEmbeddedDll)
-                    {
-                        output.Write("not-a-dll"u8);
-                    }
-                    else
-                    {
-                        using var input = System.IO.File.OpenRead(buildDll);
-                        input.CopyTo(output);
-                    }
-                }
-
-                if (extraEntryName is not null)
-                {
-                    WriteEntry(archive, extraEntryName, "extra");
-                }
+                WriteEntry(archive, name, content);
             }
+        }
 
+        private void WriteChecksum(string? checksumOverride)
+        {
             var checksum = checksumOverride
-                           ?? Convert.ToHexString(MD5.HashData(System.IO.File.ReadAllBytes(cipxPath)));
+                           ?? Convert.ToHexString(MD5.HashData(System.IO.File.ReadAllBytes(CipxPath)));
             System.IO.File.WriteAllText(
-                System.IO.Path.Combine(cipxDirectory, "checksums.md"),
+                File(System.IO.Path.Combine("cipx", "checksums.md")),
                 $"<!-- CLASSISLAND_PKG_MD5 {{\"QQListener.cipx\":\"{checksum}\"}} -->");
         }
 
         private static void WriteEntry(ZipArchive archive, string name, string content)
         {
             var entry = archive.CreateEntry(name);
-            using var writer = new StreamWriter(entry.Open());
+            using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             writer.Write(content);
         }
     }

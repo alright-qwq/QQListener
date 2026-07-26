@@ -14,8 +14,13 @@ namespace QQListener.ReleaseVerifier;
 public static class ReleaseMetadataVerifier
 {
     private const string TargetFramework = "net8.0-windows10.0.19041.0";
+    private const string ExpectedReleaseVersion = "1.1.0.0";
     private const long MaxManifestBytes = 1024 * 1024;
     private const long MaxDllBytes = 128L * 1024 * 1024;
+    private const int MaxArchiveEntries = 1024;
+    private const long MaxExpandedBytes = 256L * 1024 * 1024;
+    private static readonly string[] RequiredRootFiles =
+        ["manifest.yml", "QQListener.dll", "README.md", "CHANGELOG.md", "icon.png"];
     private static readonly Regex CanonicalVersionPattern = new(
         @"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$",
         RegexOptions.CultureInvariant);
@@ -109,7 +114,7 @@ public static class ReleaseMetadataVerifier
                 tagVersion).Errors);
             if (!string.Equals(dll.SimpleName, "QQListener", StringComparison.Ordinal))
             {
-                errors.Add($"build DLL assembly name '{dll.SimpleName}' is not 'QQListener'.");
+                errors.Add("build DLL assembly name is not 'QQListener'.");
             }
         }
         else if (tagVersion is not null)
@@ -148,6 +153,10 @@ public static class ReleaseMetadataVerifier
                 package.Dll.AssemblyVersion,
                 package.Dll.FileVersion,
                 tagVersion: null).Errors);
+            RequireExpectedReleaseVersion(errors, "manifest", package.Manifest.Version);
+            RequireExpectedReleaseVersion(errors, "project", projectVersion);
+            RequireExpectedReleaseVersion(errors, "assembly", package.Dll.AssemblyVersion);
+            RequireExpectedReleaseVersion(errors, "file", package.Dll.FileVersion);
             if (!string.Equals(package.Manifest.EntranceAssembly, "QQListener.dll", StringComparison.Ordinal))
             {
                 errors.Add("archive manifest entranceAssembly must be exactly 'QQListener.dll'.");
@@ -155,7 +164,7 @@ public static class ReleaseMetadataVerifier
 
             if (!string.Equals(package.Dll.SimpleName, "QQListener", StringComparison.Ordinal))
             {
-                errors.Add($"archive DLL assembly name '{package.Dll.SimpleName}' is not 'QQListener'.");
+                errors.Add("archive DLL assembly name is not 'QQListener'.");
             }
         }
 
@@ -222,13 +231,28 @@ public static class ReleaseMetadataVerifier
         }
 
         using var archive = ZipFile.OpenRead(cipxPath);
+        var auditErrorCount = errors.Count;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        ZipArchiveEntry? manifestEntry = null;
-        ZipArchiveEntry? dllEntry = null;
+        var safePaths = new List<string>();
+        var requiredEntries = RequiredRootFiles.ToDictionary(
+            name => name,
+            _ => (ZipArchiveEntry?)null,
+            StringComparer.Ordinal);
+        var expandedBytes = 0L;
+        var expandedSizeExceeded = false;
 
         foreach (var entry in archive.Entries)
         {
             var name = entry.FullName;
+            if (entry.Length > MaxExpandedBytes - expandedBytes)
+            {
+                expandedSizeExceeded = true;
+            }
+            else
+            {
+                expandedBytes += entry.Length;
+            }
+
             if (!IsSafeArchivePath(name))
             {
                 errors.Add($"archive entry '{name}' is not a safe relative path.");
@@ -240,57 +264,170 @@ public static class ReleaseMetadataVerifier
                 errors.Add($"archive entry '{name}' is duplicated by case-insensitive name.");
             }
 
+            foreach (var otherPath in safePaths)
+            {
+                if (IsPathAncestor(name, otherPath) || IsPathAncestor(otherPath, name))
+                {
+                    errors.Add($"archive entry '{name}' has a file-directory collision.");
+                    break;
+                }
+            }
+
+            safePaths.Add(name);
             var basename = name.Split('/').Last();
-            if ((basename.Equals("manifest.yml", StringComparison.OrdinalIgnoreCase)
-                 && !name.Equals("manifest.yml", StringComparison.Ordinal))
-                || (basename.Equals("QQListener.dll", StringComparison.OrdinalIgnoreCase)
-                    && !name.Equals("QQListener.dll", StringComparison.Ordinal)))
+            var reservedName = RequiredRootFiles.FirstOrDefault(required =>
+                basename.Equals(required, StringComparison.OrdinalIgnoreCase));
+            if (reservedName is not null && !name.Equals(reservedName, StringComparison.Ordinal))
             {
                 errors.Add($"archive reserved entry '{name}' must use its exact root-level name.");
             }
 
             if (name.EndsWith(".cipx", StringComparison.OrdinalIgnoreCase)
                 || basename.Equals("checksums.md", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".md5", StringComparison.OrdinalIgnoreCase)
                 || name.EndsWith(".md5sum", StringComparison.OrdinalIgnoreCase))
             {
                 errors.Add($"archive entry '{name}' is a nested or generated artifact.");
             }
 
-            if (name.Equals("manifest.yml", StringComparison.Ordinal)) manifestEntry = entry;
-            if (name.Equals("QQListener.dll", StringComparison.Ordinal)) dllEntry = entry;
+            if (requiredEntries.ContainsKey(name)) requiredEntries[name] = entry;
         }
 
-        if (manifestEntry is null) throw new FormatException("archive is missing root manifest.yml.");
-        if (dllEntry is null) throw new FormatException("archive is missing root QQListener.dll.");
-        if (manifestEntry.Length > MaxManifestBytes) throw new FormatException("archive manifest.yml is too large.");
-        if (dllEntry.Length > MaxDllBytes) throw new FormatException("archive QQListener.dll is too large.");
-
-        ManifestMetadata manifest;
-        using (var reader = new StreamReader(manifestEntry.Open()))
+        if (archive.Entries.Count > MaxArchiveEntries)
         {
-            manifest = ParseManifest(reader.ReadToEnd());
+            errors.Add($"archive contains more than {MaxArchiveEntries} entries.");
+        }
+
+        if (expandedSizeExceeded)
+        {
+            errors.Add($"archive expanded size exceeds {MaxExpandedBytes} bytes.");
+        }
+
+        foreach (var required in requiredEntries)
+        {
+            if (required.Value is null)
+            {
+                errors.Add($"archive is missing root {required.Key}.");
+            }
+        }
+
+        if (requiredEntries["manifest.yml"]?.Length > MaxManifestBytes)
+        {
+            errors.Add("archive manifest.yml is too large.");
+        }
+
+        if (requiredEntries["QQListener.dll"]?.Length > MaxDllBytes)
+        {
+            errors.Add("archive QQListener.dll is too large.");
+        }
+
+        if (errors.Count != auditErrorCount)
+        {
+            throw new FormatException("archive directory audit failed.");
         }
 
         string? tempDirectory = null;
         try
         {
             tempDirectory = TemporaryDirectoryFactory();
-            var dllPath = Path.Combine(tempDirectory, "QQListener.dll");
-            using (var input = dllEntry.Open())
-            using (var output = new FileStream(dllPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            var extractionRoot = Path.GetFullPath(tempDirectory);
+            if (!Directory.Exists(extractionRoot))
             {
-                input.CopyTo(output);
+                throw new IOException("temporary extraction directory was not created.");
             }
 
-            return new PackageMetadata(manifest, ReadDll(dllPath));
+            var rootPrefix = extractionRoot.TrimEnd(
+                                 Path.DirectorySeparatorChar,
+                                 Path.AltDirectorySeparatorChar)
+                             + Path.DirectorySeparatorChar;
+            var pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            var actualExpandedBytes = 0L;
+            foreach (var entry in archive.Entries)
+            {
+                var relativePath = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
+                var destinationPath = Path.GetFullPath(Path.Combine(extractionRoot, relativePath));
+                if (!destinationPath.StartsWith(rootPrefix, pathComparison))
+                {
+                    throw new InvalidDataException("archive extraction path escaped the temporary directory.");
+                }
+
+                var parentDirectory = Path.GetDirectoryName(destinationPath)
+                                      ?? throw new InvalidDataException("archive extraction path has no parent directory.");
+                Directory.CreateDirectory(parentDirectory);
+                using var input = entry.Open();
+                using var output = new FileStream(
+                    destinationPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None);
+                var entryLimit = entry.FullName switch
+                {
+                    "manifest.yml" => MaxManifestBytes,
+                    "QQListener.dll" => MaxDllBytes,
+                    _ => MaxExpandedBytes
+                };
+                CopyWithLimits(input, output, entryLimit, ref actualExpandedBytes);
+            }
+
+            foreach (var requiredName in RequiredRootFiles)
+            {
+                EnsureLeafFile(Path.Combine(extractionRoot, requiredName), requiredName);
+            }
+
+            var manifest = ReadManifest(Path.Combine(extractionRoot, "manifest.yml"));
+            var dll = ReadDll(Path.Combine(extractionRoot, "QQListener.dll"));
+            return new PackageMetadata(manifest, dll);
         }
         finally
         {
             if (tempDirectory is not null && Directory.Exists(tempDirectory))
             {
-                Directory.Delete(tempDirectory, recursive: true);
+                try
+                {
+                    Directory.Delete(tempDirectory, recursive: true);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    throw new IOException("temporary directory cleanup failed.", exception);
+                }
             }
         }
+    }
+
+    private static void CopyWithLimits(
+        Stream input,
+        Stream output,
+        long entryLimit,
+        ref long actualExpandedBytes)
+    {
+        var buffer = new byte[81920];
+        var entryBytes = 0L;
+        int bytesRead;
+        while ((bytesRead = input.Read(buffer, 0, buffer.Length)) != 0)
+        {
+            if (bytesRead > entryLimit - entryBytes
+                || bytesRead > MaxExpandedBytes - actualExpandedBytes)
+            {
+                throw new InvalidDataException("archive expanded data exceeds the allowed size.");
+            }
+
+            output.Write(buffer, 0, bytesRead);
+            entryBytes += bytesRead;
+            actualExpandedBytes += bytesRead;
+        }
+    }
+
+    private static void EnsureLeafFile(string path, string name)
+    {
+        if (!File.Exists(path) || File.GetAttributes(path).HasFlag(FileAttributes.Directory))
+        {
+            throw new FormatException($"archive root {name} must be a leaf file.");
+        }
+
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        _ = stream.ReadByte();
     }
 
     private static ManifestMetadata ReadManifest(string path) =>
@@ -373,6 +510,11 @@ public static class ReleaseMetadataVerifier
             && segment is not "." and not "..");
     }
 
+    private static bool IsPathAncestor(string possibleAncestor, string path) =>
+        path.Length > possibleAncestor.Length
+        && path.StartsWith(possibleAncestor, StringComparison.OrdinalIgnoreCase)
+        && path[possibleAncestor.Length] == '/';
+
     private static void ValidateCanonical(List<string> errors, string source, string value)
     {
         try
@@ -390,7 +532,7 @@ public static class ReleaseMetadataVerifier
         if (!CanonicalVersionPattern.IsMatch(value))
         {
             throw new FormatException(
-                $"{source} version '{value}' is not a canonical four-part version.");
+                $"{source} version is not a canonical four-part version.");
         }
 
         var parts = value.Split('.');
@@ -398,7 +540,18 @@ public static class ReleaseMetadataVerifier
             || new System.Version(value).ToString(4) != value)
         {
             throw new FormatException(
-                $"{source} version '{value}' is not a canonical four-part version.");
+                $"{source} version is not a canonical four-part version.");
+        }
+    }
+
+    private static void RequireExpectedReleaseVersion(
+        List<string> errors,
+        string source,
+        string value)
+    {
+        if (!string.Equals(value, ExpectedReleaseVersion, StringComparison.Ordinal))
+        {
+            errors.Add($"{source} version is not the required release version {ExpectedReleaseVersion}.");
         }
     }
 
@@ -410,7 +563,7 @@ public static class ReleaseMetadataVerifier
     {
         if (!string.Equals(expected, actual, StringComparison.Ordinal))
         {
-            errors.Add($"{source} version '{actual}' does not match manifest '{expected}'.");
+            errors.Add($"{source} version does not match manifest version.");
         }
     }
 

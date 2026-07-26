@@ -1,3 +1,4 @@
+using System.Text.Json;
 using YamlDotNet.RepresentationModel;
 using Xunit;
 
@@ -30,14 +31,21 @@ public sealed class WorkflowTests
             "--metadata-only",
             "name: Build CIPX",
             "-p:CreateCipx=true",
-            "name: Verify branch package",
+            "name: Verify clean install package",
+            "name: Verify tagged clean install package",
             "name: Upload artifacts");
 
         Assert.Contains("if: github.ref_type != 'tag'", yaml, StringComparison.Ordinal);
         Assert.Contains("if: github.ref_type == 'tag'", yaml, StringComparison.Ordinal);
         Assert.Contains("--tag \"${{ github.ref_name }}\"", yaml, StringComparison.Ordinal);
+        Assert.Contains("name: Verify clean install package", yaml, StringComparison.Ordinal);
+        Assert.Contains("name: Verify tagged clean install package", yaml, StringComparison.Ordinal);
         Assert.Contains("cipx/QQListener.cipx", yaml, StringComparison.Ordinal);
         Assert.Contains("cipx/checksums.md", yaml, StringComparison.Ordinal);
+
+        using var samples = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(root, "Samples", "qq-toast-samples.json")));
+        Assert.Equal(23, samples.RootElement.GetArrayLength());
     }
 
     private static void AssertOrdered(string value, params string[] fragments)

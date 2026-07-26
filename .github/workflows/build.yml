@@ -47,11 +47,11 @@ jobs:
       - name: Build CIPX
         run: dotnet build QQListener.csproj --configuration Release --no-restore -p:CreateCipx=true -p:ContinuousIntegrationBuild=true
 
-      - name: Verify branch package
+      - name: Verify clean install package
         if: github.ref_type != 'tag'
         run: dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build --no-restore -- --root . --configuration Release
 
-      - name: Verify tagged package
+      - name: Verify tagged clean install package
         if: github.ref_type == 'tag'
         run: dotnet run --project Tools/QQListener.ReleaseVerifier/QQListener.ReleaseVerifier.csproj --configuration Release --no-build --no-restore -- --root . --configuration Release --tag "${{ github.ref_name }}"
 

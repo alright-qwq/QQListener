@@ -21,6 +21,20 @@ public class QqNotificationCandidateFilterTests
         Assert.Equal(expected, QqNotificationCandidateFilter.IsCandidate(snapshot, qqOnly: true));
     }
 
+    [Theory]
+    [InlineData("com.tencent.qqmusic")]
+    [InlineData("com.tencent.qqbrowser")]
+    [InlineData("Tencent.QQNTHelper")]
+    [InlineData("prefix.Tencent.QQNT")]
+    [InlineData("Tencent.QQNT.suffix")]
+    [InlineData("not-com.tencent.qq")]
+    public void RejectsLookalikeAppIds(string appId)
+    {
+        var snapshot = new WindowsToastSnapshot(1, "Untrusted App", appId, true, ["sender", "body"]);
+
+        Assert.False(QqNotificationCandidateFilter.IsCandidate(snapshot, qqOnly: true));
+    }
+
     [Fact]
     public void RejectsAnyShapeWhenAppIdentityIsUnavailable()
     {

@@ -5,8 +5,13 @@ public static class QqNotificationCandidateFilter
     private static readonly HashSet<string> TrustedDisplayNames =
         new(StringComparer.OrdinalIgnoreCase) { "QQ", "腾讯QQ", "TIM" };
 
-    private static readonly string[] TrustedAppIdMarkers =
-        ["tencentqq", "qqnt", "comtencentqq", "tencenttim", "comtencenttim"];
+    private static readonly HashSet<string> TrustedAppIds =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Tencent.QQNT",
+            "com.tencent.qq",
+            "com.tencent.tim"
+        };
 
     public static bool IsCandidate(WindowsToastSnapshot snapshot, bool qqOnly)
     {
@@ -17,11 +22,6 @@ public static class QqNotificationCandidateFilter
         if (string.IsNullOrWhiteSpace(appName) && string.IsNullOrWhiteSpace(appId)) return false;
         if (!qqOnly) return true;
         if (TrustedDisplayNames.Contains(appName)) return true;
-
-        var normalizedAppId = new string(appId
-            .Where(char.IsLetterOrDigit)
-            .Select(char.ToLowerInvariant)
-            .ToArray());
-        return TrustedAppIdMarkers.Any(normalizedAppId.Contains);
+        return TrustedAppIds.Contains(appId);
     }
 }

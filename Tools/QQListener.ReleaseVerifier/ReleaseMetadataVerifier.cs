@@ -16,7 +16,11 @@ public static class ReleaseMetadataVerifier
     private const string TargetFramework = "net8.0-windows10.0.19041.0";
     private const string ExpectedReleaseVersion = "1.1.0.0";
     private const long MaxManifestBytes = 1024 * 1024;
-    private const long MaxDllBytes = 128L * 1024 * 1024;
+    private const long MaxCipxBytes = 256L * 1024 * 1024;
+    private const long MaxChecksumsBytes = 1024L * 1024;
+    private const int MaxArchiveEntries = 512;
+    private const long MaxEntryBytes = 128L * 1024 * 1024;
+    private const long MaxExtractedBytes = 256L * 1024 * 1024;
     private static readonly string[] RequiredRootFiles =
         ["manifest.yml", "QQListener.dll", "README.md", "CHANGELOG.md", "icon.png"];
     private static readonly Regex CanonicalVersionPattern = new(
@@ -27,6 +31,9 @@ public static class ReleaseMetadataVerifier
         RegexOptions.Singleline | RegexOptions.CultureInvariant);
 
     internal static Func<string> TemporaryDirectoryFactory { get; set; } = CreateTemporaryDirectory;
+
+    internal static ArchiveResourceBudget CreateArchiveResourceBudget() =>
+        new(MaxExtractedBytes);
 
     public static VerificationResult CompareVersions(
         string manifestVersion,
@@ -133,15 +140,47 @@ public static class ReleaseMetadataVerifier
             return new VerificationResult(errors);
         }
 
+        var cipxPath = Path.Combine(root, "cipx", "QQListener.cipx");
+        var checksumsPath = Path.Combine(root, "cipx", "checksums.md");
+        Try(errors, "package", () =>
+        {
+            if (!File.Exists(cipxPath))
+            {
+                throw new FileNotFoundException("CIPX file is missing.", cipxPath);
+            }
+
+            if (!File.Exists(checksumsPath))
+            {
+                throw new FileNotFoundException("checksums.md is missing.", checksumsPath);
+            }
+
+            if (new FileInfo(cipxPath).Length > MaxCipxBytes)
+            {
+                throw new InvalidDataException("CIPX file is too large.");
+            }
+
+            if (new FileInfo(checksumsPath).Length > MaxChecksumsBytes)
+            {
+                throw new InvalidDataException("checksums.md is too large.");
+            }
+        });
+        if (errors.Count > 0)
+        {
+            return new VerificationResult(errors);
+        }
+
+        Try(errors, "checksum", () => VerifyChecksum(cipxPath, checksumsPath));
+        if (errors.Count > 0)
+        {
+            return new VerificationResult(errors);
+        }
+
         string? projectVersion = null;
         Try(errors, "project", () =>
             projectVersion = ReadProjectVersion(Path.Combine(root, "Directory.Build.props")));
 
-        var cipxPath = Path.Combine(root, "cipx", "QQListener.cipx");
-        var checksumsPath = Path.Combine(root, "cipx", "checksums.md");
         PackageMetadata? package = null;
         Try(errors, "archive", () => package = ReadPackage(cipxPath, errors));
-        Try(errors, "checksum", () => VerifyChecksum(cipxPath, checksumsPath));
 
         if (projectVersion is not null && package is not null)
         {
@@ -230,8 +269,15 @@ public static class ReleaseMetadataVerifier
 
         using var archive = ZipFile.OpenRead(cipxPath);
         var auditErrorCount = errors.Count;
+        if (archive.Entries.Count > MaxArchiveEntries)
+        {
+            errors.Add($"archive contains more than {MaxArchiveEntries} entries.");
+            throw new FormatException("archive directory audit failed.");
+        }
+
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var safePaths = new List<(string Path, string SortKey)>();
+        var declaredBudget = CreateArchiveResourceBudget();
         var requiredEntries = RequiredRootFiles.ToDictionary(
             name => name,
             _ => (ZipArchiveEntry?)null,
@@ -240,6 +286,13 @@ public static class ReleaseMetadataVerifier
         foreach (var entry in archive.Entries)
         {
             var name = entry.FullName;
+            var entryLimit = name == "manifest.yml" ? MaxManifestBytes : MaxEntryBytes;
+            var budgetError = declaredBudget.AuditDeclared(name, entry.Length, entryLimit);
+            if (budgetError is not null)
+            {
+                errors.Add(budgetError);
+            }
+
             if (!IsSafeArchivePath(name))
             {
                 errors.Add($"archive entry '{name}' is not a safe relative path.");
@@ -294,16 +347,6 @@ public static class ReleaseMetadataVerifier
             }
         }
 
-        if (requiredEntries["manifest.yml"]?.Length > MaxManifestBytes)
-        {
-            errors.Add("archive manifest.yml is too large.");
-        }
-
-        if (requiredEntries["QQListener.dll"]?.Length > MaxDllBytes)
-        {
-            errors.Add("archive QQListener.dll is too large.");
-        }
-
         if (errors.Count != auditErrorCount)
         {
             throw new FormatException("archive directory audit failed.");
@@ -326,6 +369,7 @@ public static class ReleaseMetadataVerifier
             var pathComparison = OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
+            var extractionBudget = CreateArchiveResourceBudget();
             foreach (var entry in archive.Entries)
             {
                 var relativePath = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
@@ -344,13 +388,10 @@ public static class ReleaseMetadataVerifier
                     FileMode.CreateNew,
                     FileAccess.Write,
                     FileShare.None);
-                var entryLimit = entry.FullName switch
-                {
-                    "manifest.yml" => (long?)MaxManifestBytes,
-                    "QQListener.dll" => MaxDllBytes,
-                    _ => null
-                };
-                CopyWithLimit(input, output, entryLimit);
+                var entryLimit = entry.FullName == "manifest.yml"
+                    ? MaxManifestBytes
+                    : MaxEntryBytes;
+                extractionBudget.CopyEntry(input, output, entry.FullName, entryLimit);
             }
 
             foreach (var requiredName in RequiredRootFiles)
@@ -375,26 +416,6 @@ public static class ReleaseMetadataVerifier
                     throw new IOException("temporary directory cleanup failed.", exception);
                 }
             }
-        }
-    }
-
-    private static void CopyWithLimit(
-        Stream input,
-        Stream output,
-        long? entryLimit)
-    {
-        var buffer = new byte[81920];
-        var entryBytes = 0L;
-        int bytesRead;
-        while ((bytesRead = input.Read(buffer, 0, buffer.Length)) != 0)
-        {
-            if (entryLimit is not null && bytesRead > entryLimit.Value - entryBytes)
-            {
-                throw new InvalidDataException("archive entry exceeds the allowed size.");
-            }
-
-            output.Write(buffer, 0, bytesRead);
-            entryBytes += bytesRead;
         }
     }
 
@@ -465,7 +486,8 @@ public static class ReleaseMetadataVerifier
             throw new FormatException($"checksum marker does not contain exact filename '{filename}'.");
         }
 
-        var actual = Convert.ToHexString(MD5.HashData(File.ReadAllBytes(cipxPath)));
+        using var stream = new FileStream(cipxPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var actual = Convert.ToHexString(MD5.HashData(stream));
         if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
         {
             throw new FormatException($"checksum mismatch for '{filename}'.");
@@ -570,4 +592,46 @@ public static class ReleaseMetadataVerifier
     private sealed record ManifestMetadata(string Version, string EntranceAssembly);
     private sealed record DllMetadata(string SimpleName, string AssemblyVersion, string FileVersion);
     private sealed record PackageMetadata(ManifestMetadata Manifest, DllMetadata Dll);
+}
+
+internal sealed class ArchiveResourceBudget(long totalLimit)
+{
+    private long _declaredBytes;
+    private long _extractedBytes;
+
+    internal string? AuditDeclared(string entryPath, long length, long entryLimit)
+    {
+        if (length > entryLimit)
+        {
+            return $"archive entry '{entryPath}' exceeds the allowed size.";
+        }
+
+        if (length > totalLimit - _declaredBytes)
+        {
+            return $"archive entry '{entryPath}' exceeds the total extraction budget.";
+        }
+
+        _declaredBytes += length;
+        return null;
+    }
+
+    internal void CopyEntry(Stream input, Stream output, string entryPath, long entryLimit)
+    {
+        var buffer = new byte[81920];
+        var entryBytes = 0L;
+        int bytesRead;
+        while ((bytesRead = input.Read(buffer, 0, buffer.Length)) != 0)
+        {
+            if (bytesRead > entryLimit - entryBytes
+                || bytesRead > totalLimit - _extractedBytes)
+            {
+                throw new InvalidDataException(
+                    $"archive entry '{entryPath}' exceeds the allowed extraction budget.");
+            }
+
+            output.Write(buffer, 0, bytesRead);
+            entryBytes += bytesRead;
+            _extractedBytes += bytesRead;
+        }
+    }
 }

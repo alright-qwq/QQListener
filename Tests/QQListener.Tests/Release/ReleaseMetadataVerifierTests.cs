@@ -432,9 +432,9 @@ public sealed class ReleaseMetadataVerifierTests
     }
 
     [Fact]
-    public void PackageAcceptsFiveThousandIndependentEntries()
+    public void PackageAcceptsMaximumEntryCount()
     {
-        var extras = Enumerable.Range(0, 5000)
+        var extras = Enumerable.Range(0, 507)
             .Select(index => new ArchiveItem($"assets/{index:D4}.txt", string.Empty))
             .ToArray();
         using var fixture = ReleaseFixture.Create(extraEntries: extras);
@@ -442,6 +442,53 @@ public sealed class ReleaseMetadataVerifierTests
         var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
 
         Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+    }
+
+    [Fact]
+    public void PackageRejectsEntryCountOverLimitBeforeExtraction()
+    {
+        var extras = Enumerable.Range(0, 508)
+            .Select(index => new ArchiveItem($"assets/{index:D4}.txt", string.Empty))
+            .ToArray();
+        using var fixture = ReleaseFixture.Create(extraEntries: extras);
+
+        AssertScanRejectsBeforeExtraction(fixture, "more than 512 entries");
+    }
+
+    [Fact]
+    public void DefaultArchiveBudgetAcceptsExactEntryAndTotalLimits()
+    {
+        var budget = ReleaseMetadataVerifier.CreateArchiveResourceBudget();
+
+        Assert.Null(budget.AuditDeclared("first.bin", 128L * 1024 * 1024, 128L * 1024 * 1024));
+        Assert.Null(budget.AuditDeclared("second.bin", 128L * 1024 * 1024, 128L * 1024 * 1024));
+    }
+
+    [Fact]
+    public void DefaultArchiveBudgetRejectsEntryAndTotalOverflow()
+    {
+        var entryBudget = ReleaseMetadataVerifier.CreateArchiveResourceBudget();
+        Assert.Contains("oversized.bin", entryBudget.AuditDeclared(
+            "oversized.bin", 128L * 1024 * 1024 + 1, 128L * 1024 * 1024));
+
+        var totalBudget = ReleaseMetadataVerifier.CreateArchiveResourceBudget();
+        Assert.Null(totalBudget.AuditDeclared("first.bin", 128L * 1024 * 1024, 128L * 1024 * 1024));
+        Assert.Null(totalBudget.AuditDeclared("second.bin", 128L * 1024 * 1024, 128L * 1024 * 1024));
+        Assert.Contains("third.bin", totalBudget.AuditDeclared("third.bin", 1, 128L * 1024 * 1024));
+    }
+
+    [Fact]
+    public void CopyEntryEnforcesActualEntryAndTotalBytes()
+    {
+        var entryBudget = new ArchiveResourceBudget(totalLimit: 10);
+        Assert.Throws<InvalidDataException>(() => entryBudget.CopyEntry(
+            new MemoryStream(new byte[6]), Stream.Null, "entry.bin", entryLimit: 5));
+
+        var totalBudget = new ArchiveResourceBudget(totalLimit: 10);
+        totalBudget.CopyEntry(new MemoryStream(new byte[6]), Stream.Null, "first.bin", entryLimit: 10);
+        var exception = Assert.Throws<InvalidDataException>(() => totalBudget.CopyEntry(
+            new MemoryStream(new byte[5]), Stream.Null, "second.bin", entryLimit: 10));
+        Assert.Contains("second.bin", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -467,6 +514,39 @@ public sealed class ReleaseMetadataVerifierTests
 
         Assert.Contains(result.Errors, error =>
             error.Contains("checksum", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void OversizedCipxIsRejectedBeforeChecksumOrExtraction()
+    {
+        using var fixture = ReleaseFixture.Create();
+        using (var stream = new FileStream(fixture.CipxFile, FileMode.Open, FileAccess.Write, FileShare.None))
+        {
+            stream.SetLength(256L * 1024 * 1024 + 1);
+        }
+
+        AssertScanRejectsBeforeExtraction(fixture, "CIPX file is too large");
+    }
+
+    [Fact]
+    public void ChecksumMismatchDoesNotCreateTemporaryDirectory()
+    {
+        using var fixture = ReleaseFixture.Create(checksumOverride: new string('0', 32));
+
+        AssertScanRejectsBeforeExtraction(fixture, "checksum");
+    }
+
+    [Fact]
+    public void OversizedChecksumsFileIsRejectedBeforeExtraction()
+    {
+        using var fixture = ReleaseFixture.Create();
+        using (var stream = new FileStream(
+                   fixture.ChecksumsFile, FileMode.Open, FileAccess.Write, FileShare.None))
+        {
+            stream.SetLength(1024L * 1024 + 1);
+        }
+
+        AssertScanRejectsBeforeExtraction(fixture, "checksums.md is too large");
     }
 
     [Fact]
@@ -562,6 +642,10 @@ public sealed class ReleaseMetadataVerifierTests
         public string Path { get; }
 
         private string CipxPath => File(System.IO.Path.Combine("cipx", "QQListener.cipx"));
+
+        public string CipxFile => CipxPath;
+
+        public string ChecksumsFile => File(System.IO.Path.Combine("cipx", "checksums.md"));
 
         public string File(string relativePath) => System.IO.Path.Combine(Path, relativePath);
 
@@ -665,10 +749,19 @@ public sealed class ReleaseMetadataVerifierTests
 
         private void WriteChecksum(string? checksumOverride)
         {
-            var checksum = checksumOverride
-                           ?? Convert.ToHexString(MD5.HashData(System.IO.File.ReadAllBytes(CipxPath)));
+            string checksum;
+            if (checksumOverride is not null)
+            {
+                checksum = checksumOverride;
+            }
+            else
+            {
+                using var stream = System.IO.File.OpenRead(CipxPath);
+                checksum = Convert.ToHexString(MD5.HashData(stream));
+            }
+
             System.IO.File.WriteAllText(
-                File(System.IO.Path.Combine("cipx", "checksums.md")),
+                ChecksumsFile,
                 $"<!-- CLASSISLAND_PKG_MD5 {{\"QQListener.cipx\":\"{checksum}\"}} -->");
         }
 

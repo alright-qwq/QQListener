@@ -94,7 +94,8 @@ public class Plugin : PluginBase
         catch (Exception ex)
         {
             // 启动期间没有 logger，吞掉异常避免拖累整个宿主启动。
-            System.Diagnostics.Debug.WriteLine($"[QQListener] 回写设置失败: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine(
+                $"[QQListener] {QqListenerDiagnosticsState.FormatError(ex, "回写设置失败")}");
         }
     }
 

@@ -136,7 +136,14 @@ public partial class QqListenerDiagnosticsState : ObservableObject
 
     public void RecordError(Exception exception, string context)
     {
-        LastErrorSummary = $"{DateTimeOffset.Now:HH:mm:ss} {context}: {exception.Message}";
+        LastErrorSummary = $"{DateTimeOffset.Now:HH:mm:ss} {FormatError(exception, context)}";
+    }
+
+    internal static string FormatError(Exception exception, string context)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        var exceptionType = exception.GetType().FullName ?? exception.GetType().Name;
+        return $"{context}: {exceptionType}";
     }
 
     public void RecordSettingsWarning(string warning)

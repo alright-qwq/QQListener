@@ -21,14 +21,7 @@ public class Plugin : PluginBase
 {
     public override void Initialize(HostBuilderContext context, IServiceCollection services)
     {
-        var settings = QqListenerSettings.Load(PluginConfigFolder);
-        settings.Normalize();
-        // Normalize 仅在内存里把越界值夹紧；若不回写，磁盘上的非法值每次启动都会被
-        // 重新读出并再次夹紧，用户从外部编辑文件时也会感到设置"被回退"。
-        if (!settings.HasLoadWarning)
-        {
-            TrySaveSettings(settings);
-        }
+        var settings = LoadStartupSettings(PluginConfigFolder);
 
         var diagnostics = new QqListenerDiagnosticsState();
         if (settings.HasLoadWarning)
@@ -61,6 +54,20 @@ public class Plugin : PluginBase
         RegisterActionMenu();
 
         services.AddSettingsPage<QqListenerSettingsPage>();
+    }
+
+    internal static QqListenerSettings LoadStartupSettings(string configFolder)
+    {
+        var settings = QqListenerSettings.Load(configFolder);
+        settings.Normalize();
+        // Normalize 仅在内存里把越界值夹紧；若不回写，磁盘上的非法值每次启动都会被
+        // 重新读出并再次夹紧，用户从外部编辑文件时也会感到设置"被回退"。
+        if (!settings.HasLoadWarning)
+        {
+            TrySaveSettings(settings);
+        }
+
+        return settings;
     }
 
 

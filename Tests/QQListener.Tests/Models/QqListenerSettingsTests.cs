@@ -52,6 +52,47 @@ public sealed class QqListenerSettingsTests
     }
 
     [Fact]
+    public void StartupDecisionKeepsMissingSettingsDisabledWithoutCreatingFiles()
+    {
+        using var directory = new TemporaryDirectory();
+
+        var settings = Plugin.LoadStartupSettings(directory.Path);
+
+        Assert.True(settings.HasLoadWarning);
+        Assert.False(settings.IsEnabled);
+        Assert.False(File.Exists(directory.File("settings.json")));
+        Assert.False(File.Exists(directory.File("settings.json.bak")));
+    }
+
+    [Fact]
+    public void StartupDecisionNormalizesAndPersistsValidSettings()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(
+            directory.File("settings.json"),
+            """
+            {
+              "IsEnabled": true,
+              "ScanIntervalSeconds": 99,
+              "CooldownSeconds": 0,
+              "CallingKeyword": "  call me  "
+            }
+            """);
+
+        var settings = Plugin.LoadStartupSettings(directory.Path);
+
+        Assert.False(settings.HasLoadWarning);
+        Assert.True(settings.IsEnabled);
+        Assert.Equal(5, settings.ScanIntervalSeconds);
+        Assert.Equal(1, settings.CooldownSeconds);
+        Assert.Equal("call me", settings.CallingKeyword);
+        Assert.Equal(5, ReadDouble(settings.SettingsFilePath, "ScanIntervalSeconds"));
+        Assert.Equal(1, ReadInt32(settings.SettingsFilePath, "CooldownSeconds"));
+        Assert.Equal("call me", ReadString(settings.SettingsFilePath, "CallingKeyword"));
+        Assert.True(File.Exists(settings.BackupFilePath));
+    }
+
+    [Fact]
     public void MissingPrimaryLoadsValidBackupDisabledWithWarning()
     {
         using var directory = new TemporaryDirectory();
@@ -296,6 +337,18 @@ public sealed class QqListenerSettingsTests
     {
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         return document.RootElement.GetProperty(propertyName).GetString() ?? "";
+    }
+
+    private static double ReadDouble(string path, string propertyName)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return document.RootElement.GetProperty(propertyName).GetDouble();
+    }
+
+    private static int ReadInt32(string path, string propertyName)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return document.RootElement.GetProperty(propertyName).GetInt32();
     }
 
     private sealed class TemporaryDirectory : IDisposable

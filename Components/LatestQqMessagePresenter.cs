@@ -29,9 +29,8 @@ public static class LatestQqMessagePresenter
         var statusText = GetStatusText(latestMessage.Importance);
         if (settings.HideSensitiveContent)
         {
-            var privacyMessageText = settings.ShowMessageBody
-                ? $"{GetSource(latestMessage.Source)} {GetImportanceName(latestMessage.Importance)}消息"
-                : "";
+            var privacyMessageText =
+                $"{GetSource(latestMessage.Source)} {GetImportanceName(latestMessage.Importance)}消息";
             return new LatestQqMessagePresentation(
                 true,
                 true,

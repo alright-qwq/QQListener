@@ -68,6 +68,24 @@ public sealed class LatestQqMessagePresenterTests
     }
 
     [Fact]
+    public void PrivacyModeKeepsRedactedPlaceholderWhenMessageBodyIsDisabled()
+    {
+        var result = Present(MessageImportance.Important, new()
+        {
+            HideSensitiveContent = true,
+            ShowSender = true,
+            ShowMessageBody = false
+        }, sender: "secret-sender", body: "private-body", conversation: "secret-group");
+
+        Assert.True(result.HasDisplayedMessage);
+        Assert.True(result.IsMessageVisible);
+        Assert.Equal("QQ 重要消息", result.MessageText);
+        Assert.DoesNotContain("secret-sender", result.MessageText, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-body", result.MessageText, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-group", result.MessageText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DisablingMessageBodyLeavesMessageTextEmpty()
     {
         var result = Present(MessageImportance.Normal, new()

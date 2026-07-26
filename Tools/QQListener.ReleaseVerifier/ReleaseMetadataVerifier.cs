@@ -17,8 +17,6 @@ public static class ReleaseMetadataVerifier
     private const string ExpectedReleaseVersion = "1.1.0.0";
     private const long MaxManifestBytes = 1024 * 1024;
     private const long MaxDllBytes = 128L * 1024 * 1024;
-    private const int MaxArchiveEntries = 1024;
-    private const long MaxExpandedBytes = 256L * 1024 * 1024;
     private static readonly string[] RequiredRootFiles =
         ["manifest.yml", "QQListener.dll", "README.md", "CHANGELOG.md", "icon.png"];
     private static readonly Regex CanonicalVersionPattern = new(
@@ -233,26 +231,15 @@ public static class ReleaseMetadataVerifier
         using var archive = ZipFile.OpenRead(cipxPath);
         var auditErrorCount = errors.Count;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var safePaths = new List<string>();
+        var impliedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var requiredEntries = RequiredRootFiles.ToDictionary(
             name => name,
             _ => (ZipArchiveEntry?)null,
             StringComparer.Ordinal);
-        var expandedBytes = 0L;
-        var expandedSizeExceeded = false;
 
         foreach (var entry in archive.Entries)
         {
             var name = entry.FullName;
-            if (entry.Length > MaxExpandedBytes - expandedBytes)
-            {
-                expandedSizeExceeded = true;
-            }
-            else
-            {
-                expandedBytes += entry.Length;
-            }
-
             if (!IsSafeArchivePath(name))
             {
                 errors.Add($"archive entry '{name}' is not a safe relative path.");
@@ -264,16 +251,11 @@ public static class ReleaseMetadataVerifier
                 errors.Add($"archive entry '{name}' is duplicated by case-insensitive name.");
             }
 
-            foreach (var otherPath in safePaths)
+            for (var separator = name.IndexOf('/'); separator >= 0; separator = name.IndexOf('/', separator + 1))
             {
-                if (IsPathAncestor(name, otherPath) || IsPathAncestor(otherPath, name))
-                {
-                    errors.Add($"archive entry '{name}' has a file-directory collision.");
-                    break;
-                }
+                impliedDirectories.Add(name[..separator]);
             }
 
-            safePaths.Add(name);
             var basename = name.Split('/').Last();
             var reservedName = RequiredRootFiles.FirstOrDefault(required =>
                 basename.Equals(required, StringComparison.OrdinalIgnoreCase));
@@ -293,14 +275,12 @@ public static class ReleaseMetadataVerifier
             if (requiredEntries.ContainsKey(name)) requiredEntries[name] = entry;
         }
 
-        if (archive.Entries.Count > MaxArchiveEntries)
+        foreach (var filePath in seen)
         {
-            errors.Add($"archive contains more than {MaxArchiveEntries} entries.");
-        }
-
-        if (expandedSizeExceeded)
-        {
-            errors.Add($"archive expanded size exceeds {MaxExpandedBytes} bytes.");
+            if (impliedDirectories.Contains(filePath))
+            {
+                errors.Add($"archive entry '{filePath}' has a file-directory collision.");
+            }
         }
 
         foreach (var required in requiredEntries)
@@ -343,7 +323,6 @@ public static class ReleaseMetadataVerifier
             var pathComparison = OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
-            var actualExpandedBytes = 0L;
             foreach (var entry in archive.Entries)
             {
                 var relativePath = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
@@ -364,11 +343,11 @@ public static class ReleaseMetadataVerifier
                     FileShare.None);
                 var entryLimit = entry.FullName switch
                 {
-                    "manifest.yml" => MaxManifestBytes,
+                    "manifest.yml" => (long?)MaxManifestBytes,
                     "QQListener.dll" => MaxDllBytes,
-                    _ => MaxExpandedBytes
+                    _ => null
                 };
-                CopyWithLimits(input, output, entryLimit, ref actualExpandedBytes);
+                CopyWithLimit(input, output, entryLimit);
             }
 
             foreach (var requiredName in RequiredRootFiles)
@@ -396,26 +375,23 @@ public static class ReleaseMetadataVerifier
         }
     }
 
-    private static void CopyWithLimits(
+    private static void CopyWithLimit(
         Stream input,
         Stream output,
-        long entryLimit,
-        ref long actualExpandedBytes)
+        long? entryLimit)
     {
         var buffer = new byte[81920];
         var entryBytes = 0L;
         int bytesRead;
         while ((bytesRead = input.Read(buffer, 0, buffer.Length)) != 0)
         {
-            if (bytesRead > entryLimit - entryBytes
-                || bytesRead > MaxExpandedBytes - actualExpandedBytes)
+            if (entryLimit is not null && bytesRead > entryLimit.Value - entryBytes)
             {
-                throw new InvalidDataException("archive expanded data exceeds the allowed size.");
+                throw new InvalidDataException("archive entry exceeds the allowed size.");
             }
 
             output.Write(buffer, 0, bytesRead);
             entryBytes += bytesRead;
-            actualExpandedBytes += bytesRead;
         }
     }
 
@@ -509,11 +485,6 @@ public static class ReleaseMetadataVerifier
             !string.IsNullOrEmpty(segment)
             && segment is not "." and not "..");
     }
-
-    private static bool IsPathAncestor(string possibleAncestor, string path) =>
-        path.Length > possibleAncestor.Length
-        && path.StartsWith(possibleAncestor, StringComparison.OrdinalIgnoreCase)
-        && path[possibleAncestor.Length] == '/';
 
     private static void ValidateCanonical(List<string> errors, string source, string value)
     {

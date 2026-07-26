@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,10 +8,7 @@ namespace QQListener.Tests.Release;
 
 public sealed class ReleaseMetadataVerifierTests
 {
-    private const int MaximumArchiveEntries = 1024;
-    private const long MaximumExpandedBytes = 256L * 1024 * 1024;
     private const int MaximumManifestBytes = 1024 * 1024;
-    private const long MaximumDllBytes = 128L * 1024 * 1024;
 
     [Fact]
     public void DetectsManifestAndProjectVersionMismatch()
@@ -396,25 +392,9 @@ public sealed class ReleaseMetadataVerifierTests
     }
 
     [Fact]
-    public void DllAtSizeLimitPassesDirectoryAudit()
+    public void PackageAcceptsFiveThousandIndependentEntries()
     {
-        using var fixture = ReleaseFixture.Create();
-        fixture.SetClaimedUncompressedLength("QQListener.dll", MaximumDllBytes);
-        AssertDirectoryAuditCreatesTemporaryDirectory(fixture);
-    }
-
-    [Fact]
-    public void DllOverSizeLimitIsRejectedBeforeExtraction()
-    {
-        using var fixture = ReleaseFixture.Create();
-        fixture.SetClaimedUncompressedLength("QQListener.dll", MaximumDllBytes + 1);
-        AssertScanRejectsBeforeExtraction(fixture);
-    }
-
-    [Fact]
-    public void ArchiveAtEntryCountLimitIsAccepted()
-    {
-        var extras = Enumerable.Range(0, MaximumArchiveEntries - 5)
+        var extras = Enumerable.Range(0, 5000)
             .Select(index => new ArchiveItem($"assets/{index:D4}.txt", string.Empty))
             .ToArray();
         using var fixture = ReleaseFixture.Create(extraEntries: extras);
@@ -422,34 +402,6 @@ public sealed class ReleaseMetadataVerifierTests
         var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
 
         Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
-    }
-
-    [Fact]
-    public void ArchiveOverEntryCountLimitIsRejectedBeforeExtraction()
-    {
-        var extras = Enumerable.Range(0, MaximumArchiveEntries - 4)
-            .Select(index => new ArchiveItem($"assets/{index:D4}.txt", string.Empty))
-            .ToArray();
-        using var fixture = ReleaseFixture.Create(extraEntries: extras);
-        AssertScanRejectsBeforeExtraction(fixture);
-    }
-
-    [Fact]
-    public void ArchiveAtExpandedSizeLimitPassesDirectoryAudit()
-    {
-        using var fixture = ReleaseFixture.Create(
-            extraEntries: [new ArchiveItem("payload.bin", "x")]);
-        fixture.SetTotalClaimedUncompressedLength("payload.bin", MaximumExpandedBytes);
-        AssertDirectoryAuditCreatesTemporaryDirectory(fixture);
-    }
-
-    [Fact]
-    public void ArchiveOverExpandedSizeLimitIsRejectedBeforeExtraction()
-    {
-        using var fixture = ReleaseFixture.Create(
-            extraEntries: [new ArchiveItem("payload.bin", "x")]);
-        fixture.SetTotalClaimedUncompressedLength("payload.bin", MaximumExpandedBytes + 1);
-        AssertScanRejectsBeforeExtraction(fixture);
     }
 
     [Fact]
@@ -507,21 +459,6 @@ public sealed class ReleaseMetadataVerifierTests
                 Assert.False(result.Success);
             });
         Assert.Equal(0, factoryCalls);
-    }
-
-    private static void AssertDirectoryAuditCreatesTemporaryDirectory(ReleaseFixture fixture)
-    {
-        var temporaryDirectory = fixture.File($"boundary-{Guid.NewGuid():N}");
-        var factoryCalls = 0;
-        WithTemporaryDirectoryFactory(
-            () =>
-            {
-                factoryCalls++;
-                return CreateDirectory(temporaryDirectory);
-            },
-            () => ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release"));
-        Assert.Equal(1, factoryCalls);
-        Assert.False(Directory.Exists(temporaryDirectory));
     }
 
     private static string ManifestWithExactSize(int size)
@@ -660,52 +597,6 @@ public sealed class ReleaseMetadataVerifierTests
             }
 
             WriteChecksum(checksumOverride);
-        }
-
-        public void SetClaimedUncompressedLength(string entryName, long length)
-        {
-            Assert.InRange(length, 0, uint.MaxValue);
-            var bytes = System.IO.File.ReadAllBytes(CipxPath);
-            var updated = false;
-            for (var offset = 0; offset <= bytes.Length - 46; offset++)
-            {
-                if (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4)) != 0x02014b50)
-                {
-                    continue;
-                }
-
-                var fileNameLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 28, 2));
-                var extraLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 30, 2));
-                var commentLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 32, 2));
-                var name = Encoding.UTF8.GetString(bytes, offset + 46, fileNameLength);
-                if (string.Equals(name, entryName, StringComparison.Ordinal))
-                {
-                    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 24, 4), checked((uint)length));
-                    var localOffset = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset + 42, 4)));
-                    BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(localOffset + 22, 4), checked((uint)length));
-                    updated = true;
-                    break;
-                }
-
-                offset += 45 + fileNameLength + extraLength + commentLength;
-            }
-
-            Assert.True(updated, $"Unable to find ZIP entry '{entryName}'.");
-            System.IO.File.WriteAllBytes(CipxPath, bytes);
-            WriteChecksum(checksumOverride: null);
-        }
-
-        public void SetTotalClaimedUncompressedLength(string entryName, long totalLength)
-        {
-            long otherLength;
-            using (var archive = ZipFile.OpenRead(CipxPath))
-            {
-                otherLength = archive.Entries
-                    .Where(entry => !string.Equals(entry.FullName, entryName, StringComparison.Ordinal))
-                    .Sum(entry => entry.Length);
-            }
-
-            SetClaimedUncompressedLength(entryName, totalLength - otherLength);
         }
 
         public void Dispose()

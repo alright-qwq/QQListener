@@ -71,6 +71,7 @@ public class Plugin : PluginBase
         services.AddSingleton<IWindowsNotificationReader, WindowsNotificationReader>();
         services.AddSingleton<QqToastMessageParser>();
         services.AddSingleton<MessageRuleEvaluator>();
+        services.AddSingleton<MessageRulePreviewService>();
         services.AddSingleton<MessageEventPipeline>();
         services.AddSingleton<IQqNotificationPoller, QqNotificationPoller>();
         services.AddSingleton<IQqListenerDelay, SystemQqListenerDelay>();

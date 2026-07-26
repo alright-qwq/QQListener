@@ -290,6 +290,50 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
+            <TextBlock FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                       Margin="0,20,0,0">
+                规则测试与预设
+            </TextBlock>
+
+            <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,4">
+                预设将替换人物/关键词/呼叫规则，不改来源和时间段。
+            </TextBlock>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                <Button Click="OnApplyHomeworkPresetClick" Content="作业提醒预设" />
+                <Button Click="OnApplyTeacherCallingPresetClick" Content="老师呼叫预设" />
+                <Button Click="OnApplyExamNoticePresetClick" Content="考试通知预设" />
+            </StackPanel>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8F2;}"
+                                       Header="测试规则"
+                                       Description="输入模拟 Toast 文本；来源留空时使用 qq.toast，时间留空时使用当前本地时间。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Spacing="8">
+                        <TextBox Text="{Binding PreviewToastText, Mode=TwoWay}"
+                                 AcceptsReturn="True"
+                                 MinHeight="80"
+                                 TextWrapping="Wrap"
+                                 Watermark="模拟 Toast 多行文本" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox Text="{Binding PreviewSourceText, Mode=TwoWay}"
+                                     Width="160"
+                                     Watermark="来源 ID" />
+                            <TextBox Text="{Binding PreviewTimeText, Mode=TwoWay}"
+                                     Width="80"
+                                     Watermark="HH:mm" />
+                            <Button Click="OnPreviewRulesClick" Content="测试规则" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding PreviewResultText}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
             <!-- 诊断状态 -->
             <TextBlock FontSize="18"
                        FontWeight="SemiBold"

@@ -17,15 +17,43 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
     private readonly QqListenerSettings _settings;
     private readonly QqListenerDiagnosticsState _diagnostics;
     private readonly QqListenerPluginInfo _pluginInfo;
+    private readonly MessageRulePreviewService _rulePreviewService;
     private readonly bool _autoSaveEnabled;
     private readonly QqListenerSettingsPersistenceCoordinator? _persistenceCoordinator;
     private DispatcherTimer? _saveTimer;
     private bool _providerAvailableCache;
     private bool _providerProbed;
+    private string _previewToastText = "";
+    private string _previewSourceText = "qq.toast";
+    private string _previewTimeText = "";
+    private string _previewResultText = "尚未测试";
 
     public QqListenerSettings Settings => _settings;
     public QqListenerDiagnosticsState Diagnostics => _diagnostics;
     public QqListenerPluginInfo PluginInfo => _pluginInfo;
+    public string PreviewToastText
+    {
+        get => _previewToastText;
+        set => SetPreviewProperty(ref _previewToastText, value, nameof(PreviewToastText));
+    }
+
+    public string PreviewSourceText
+    {
+        get => _previewSourceText;
+        set => SetPreviewProperty(ref _previewSourceText, value, nameof(PreviewSourceText));
+    }
+
+    public string PreviewTimeText
+    {
+        get => _previewTimeText;
+        set => SetPreviewProperty(ref _previewTimeText, value, nameof(PreviewTimeText));
+    }
+
+    public string PreviewResultText
+    {
+        get => _previewResultText;
+        private set => SetPreviewProperty(ref _previewResultText, value, nameof(PreviewResultText));
+    }
 
     /// <summary>是否能找到 QqNotificationProvider 实例，决定快捷按钮是否可点。</summary>
     public bool ProviderAvailable
@@ -60,15 +88,43 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
     {
     }
 
+    public QqListenerSettingsPage(
+        QqListenerSettings settings,
+        QqListenerDiagnosticsState diagnostics,
+        QqListenerPluginInfo pluginInfo,
+        MessageRulePreviewService rulePreviewService)
+        : this(settings, diagnostics, pluginInfo, true, rulePreviewService)
+    {
+    }
+
     private QqListenerSettingsPage(
         QqListenerSettings settings,
         QqListenerDiagnosticsState diagnostics,
         QqListenerPluginInfo pluginInfo,
         bool autoSaveEnabled)
+        : this(
+            settings,
+            diagnostics,
+            pluginInfo,
+            autoSaveEnabled,
+            new MessageRulePreviewService(
+                new QqToastMessageParser(),
+                new MessageRuleEvaluator(settings),
+                TimeProvider.System))
+    {
+    }
+
+    private QqListenerSettingsPage(
+        QqListenerSettings settings,
+        QqListenerDiagnosticsState diagnostics,
+        QqListenerPluginInfo pluginInfo,
+        bool autoSaveEnabled,
+        MessageRulePreviewService rulePreviewService)
     {
         _settings = settings;
         _diagnostics = diagnostics;
         _pluginInfo = pluginInfo;
+        _rulePreviewService = rulePreviewService;
         _autoSaveEnabled = autoSaveEnabled;
         DataContext = this;
         InitializeComponent();
@@ -180,6 +236,42 @@ public partial class QqListenerSettingsPage : SettingsPageBase, INotifyPropertyC
             _diagnostics.RecordError(ex, "重示最后一条失败");
         }
     }
+
+    private void OnPreviewRulesClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var result = _rulePreviewService.Preview(PreviewToastText, PreviewSourceText, PreviewTimeText);
+        PreviewResultText = result.Success
+            ? $"{GetImportanceDisplay(result.Importance)} / {result.Reason}"
+            : result.Reason;
+    }
+
+    private void OnApplyHomeworkPresetClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ApplyPreset(QqListenerRulePreset.HomeworkReminder);
+
+    private void OnApplyTeacherCallingPresetClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ApplyPreset(QqListenerRulePreset.TeacherCalling);
+
+    private void OnApplyExamNoticePresetClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ApplyPreset(QqListenerRulePreset.ExamNotice);
+
+    private void ApplyPreset(QqListenerRulePreset preset) =>
+        _settings.ModifyAndSave(settings => QqListenerRulePresets.Apply(settings, preset));
+
+    private void SetPreviewProperty(ref string field, string value, string propertyName)
+    {
+        if (field == value) return;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private static string GetImportanceDisplay(MessageImportance importance) => importance switch
+    {
+        MessageImportance.Normal => "普通",
+        MessageImportance.Important => "重要",
+        MessageImportance.Calling => "呼叫",
+        MessageImportance.Ignored => "已忽略",
+        _ => "未知"
+    };
 
     private static QqNotificationProvider? TryGetProvider()
     {

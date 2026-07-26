@@ -77,6 +77,28 @@ public sealed class MessageRuleEvaluatorTests
         Assert.False(EvaluateAt("08:00", "08:00", clock).IsIgnored);
     }
 
+    [Theory]
+    [InlineData("", "18:00")]
+    [InlineData("2", "18:00")]
+    [InlineData("25:99", "18:00")]
+    [InlineData("08:00", "")]
+    [InlineData("08:00", "2")]
+    [InlineData("08:00", "25:99")]
+    public void InvalidTimeBoundsAreTreatedAsAllDayWithoutThrowing(string start, string end)
+    {
+        var settings = new QqListenerSettings
+        {
+            RuleTimeWindowEnabled = true,
+            RuleTimeWindowStartText = start,
+            RuleTimeWindowEndText = end
+        };
+
+        var result = new MessageRuleEvaluator(settings).Evaluate(Event("qq.toast", "normal", "12:00"));
+
+        Assert.False(result.IsIgnored);
+        Assert.Equal(MessageImportance.Normal, result.Event.Importance);
+    }
+
     private static MessageEvent Event(string source, string body, string clock)
     {
         var time = TimeOnly.ParseExact(clock, "HH:mm", CultureInfo.InvariantCulture);

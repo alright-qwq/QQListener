@@ -1,4 +1,5 @@
 using QQListener.Models;
+using System.Globalization;
 
 namespace QQListener.Services;
 
@@ -91,21 +92,29 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
 
     private bool IsInsideAllowedWindow(TimeSpan time)
     {
-        var start = TimeOnly.ParseExact(
+        if (!TimeOnly.TryParseExact(
                 settings.RuleTimeWindowStartText,
                 "HH:mm",
-                System.Globalization.CultureInfo.InvariantCulture)
-            .ToTimeSpan();
-        var end = TimeOnly.ParseExact(
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var start)
+            || !TimeOnly.TryParseExact(
                 settings.RuleTimeWindowEndText,
                 "HH:mm",
-                System.Globalization.CultureInfo.InvariantCulture)
-            .ToTimeSpan();
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var end))
+        {
+            return true;
+        }
 
-        if (start == end) return true;
-        return start < end
-            ? time >= start && time < end
-            : time >= start || time < end;
+        var startTime = start.ToTimeSpan();
+        var endTime = end.ToTimeSpan();
+
+        if (startTime == endTime) return true;
+        return startTime < endTime
+            ? time >= startTime && time < endTime
+            : time >= startTime || time < endTime;
     }
 
     private static MessageRuleEvaluationResult Ignore(MessageEvent messageEvent, string reason) => new(

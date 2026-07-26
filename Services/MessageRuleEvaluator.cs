@@ -11,10 +11,19 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
         var blacklist = settings.Blacklist.FirstOrDefault(x => Contains(fullText, x));
         if (!string.IsNullOrWhiteSpace(blacklist))
         {
-            return new MessageRuleEvaluationResult(
-                messageEvent with { Importance = MessageImportance.Ignored },
-                true,
-                "命中黑名单规则");
+            return Ignore(messageEvent, "命中黑名单规则");
+        }
+
+        var allowedSources = settings.AllowedSources;
+        if (allowedSources.Count > 0
+            && !allowedSources.Contains(messageEvent.Source, StringComparer.OrdinalIgnoreCase))
+        {
+            return Ignore(messageEvent, "来源不在允许列表");
+        }
+
+        if (settings.RuleTimeWindowEnabled && !IsInsideAllowedWindow(messageEvent.ReceivedAt.TimeOfDay))
+        {
+            return Ignore(messageEvent, "不在允许时间段");
         }
 
         if (settings.CallingEnabled
@@ -79,4 +88,28 @@ public class MessageRuleEvaluator(QqListenerSettings settings)
                && !string.IsNullOrWhiteSpace(keyword)
                && value.Contains(keyword, StringComparison.OrdinalIgnoreCase);
     }
+
+    private bool IsInsideAllowedWindow(TimeSpan time)
+    {
+        var start = TimeOnly.ParseExact(
+                settings.RuleTimeWindowStartText,
+                "HH:mm",
+                System.Globalization.CultureInfo.InvariantCulture)
+            .ToTimeSpan();
+        var end = TimeOnly.ParseExact(
+                settings.RuleTimeWindowEndText,
+                "HH:mm",
+                System.Globalization.CultureInfo.InvariantCulture)
+            .ToTimeSpan();
+
+        if (start == end) return true;
+        return start < end
+            ? time >= start && time < end
+            : time >= start || time < end;
+    }
+
+    private static MessageRuleEvaluationResult Ignore(MessageEvent messageEvent, string reason) => new(
+        messageEvent with { Importance = MessageImportance.Ignored },
+        true,
+        reason);
 }

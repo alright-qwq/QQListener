@@ -167,6 +167,30 @@
                 </controls:SettingsExpander.Footer>
             </controls:SettingsExpander>
 
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE840;}"
+                                       Header="普通消息置顶"
+                                       Description="普通消息提醒是否显示在最前方">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.NormalTopmost, Mode=TwoWay}" />
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE840;}"
+                                       Header="重要消息置顶"
+                                       Description="重要消息提醒是否显示在最前方">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.ImportantTopmost, Mode=TwoWay}" />
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE840;}"
+                                       Header="呼叫消息置顶"
+                                       Description="呼叫消息提醒是否显示在最前方">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.CallingTopmost, Mode=TwoWay}" />
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE9F5;}"
                                        Header="滚动速度"
                                        Description="消息文本滚动速度，0 表示不滚动，范围 0~4">
@@ -193,6 +217,42 @@
                        Margin="0,20,0,0">
                 过滤规则
             </TextBlock>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE8F2;}"
+                                       Header="允许的来源（每行一个）"
+                                       Description="仅处理这些来源；留空允许全部。来源精确匹配并忽略大小写">
+                <controls:SettingsExpander.Footer>
+                    <TextBox Text="{Binding Settings.AllowedSourcesText, Mode=TwoWay}"
+                             AcceptsReturn="True"
+                             MinHeight="100"
+                             TextWrapping="Wrap"
+                             HorizontalAlignment="Stretch" />
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE916;}"
+                                       Header="允许时间段"
+                                       Description="只在指定时间段内提醒">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.RuleTimeWindowEnabled, Mode=TwoWay}" />
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE823;}"
+                                       Header="允许时间范围"
+                                       Description="开始和结束均使用 HH:mm 格式；跨午夜时间段会自动识别">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Text="{Binding Settings.RuleTimeWindowStartText, Mode=TwoWay}"
+                                 Width="80"
+                                 Watermark="开始" />
+                        <TextBlock Text="至" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding Settings.RuleTimeWindowEndText, Mode=TwoWay}"
+                                 Width="80"
+                                 Watermark="结束" />
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE92F;}"
                                        Header="重要人物（每行一个）"

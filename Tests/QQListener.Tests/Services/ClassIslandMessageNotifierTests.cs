@@ -6,6 +6,25 @@ namespace QQListener.Tests.Services;
 
 public class ClassIslandMessageNotifierTests
 {
+    [Theory]
+    [InlineData(MessageImportance.Normal, true, false, false, true)]
+    [InlineData(MessageImportance.Important, false, true, false, true)]
+    [InlineData(MessageImportance.Calling, false, false, true, true)]
+    [InlineData(MessageImportance.Calling, false, false, false, false)]
+    [InlineData(MessageImportance.Ignored, true, false, false, false)]
+    public void TopmostUsesImportanceSetting(
+        MessageImportance importance, bool normal, bool important, bool calling, bool expected)
+    {
+        var notifier = new ClassIslandMessageNotifier(new QqListenerSettings
+        {
+            NormalTopmost = normal,
+            ImportantTopmost = important,
+            CallingTopmost = calling
+        });
+
+        Assert.Equal(expected, notifier.GetTopmost(importance));
+    }
+
     [Fact]
     public void DurationIsClampedAtConsumptionPoint()
     {

@@ -78,10 +78,18 @@ public class ClassIslandMessageNotifier(QqListenerSettings settings)
                 IsSpeechEnabled = true,
                 IsNotificationEffectEnabled = true,
                 IsNotificationSoundEnabled = true,
-                IsNotificationTopmostEnabled = messageEvent.IsCalling
+                IsNotificationTopmostEnabled = GetTopmost(messageEvent.Importance)
             }
         };
     }
+
+    public bool GetTopmost(MessageImportance importance) => importance switch
+    {
+        MessageImportance.Ignored => false,
+        MessageImportance.Calling => settings.CallingTopmost,
+        MessageImportance.Important => settings.ImportantTopmost,
+        _ => settings.NormalTopmost
+    };
 
     public TimeSpan GetDuration(MessageImportance importance) => importance switch
     {

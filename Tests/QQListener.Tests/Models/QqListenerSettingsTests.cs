@@ -8,6 +8,37 @@ namespace QQListener.Tests.Models;
 public sealed class QqListenerSettingsTests
 {
     [Fact]
+    public void NewRuleDefaultsAndDerivedAllowedSourcesAreStable()
+    {
+        var settings = new QqListenerSettings { AllowedSourcesText = " qq.toast \r\n\r\nOTHER.Source\n " };
+
+        Assert.Equal(["qq.toast", "OTHER.Source"], settings.AllowedSources);
+        Assert.False(settings.RuleTimeWindowEnabled);
+        Assert.Equal("00:00", settings.RuleTimeWindowStartText);
+        Assert.Equal("00:00", settings.RuleTimeWindowEndText);
+        Assert.False(settings.NormalTopmost);
+        Assert.False(settings.ImportantTopmost);
+        Assert.True(settings.CallingTopmost);
+    }
+
+    [Theory]
+    [InlineData("08:00", "invalid")]
+    [InlineData("invalid", "18:00")]
+    public void NormalizeRestoresBothTimeBoundsWhenEitherIsInvalid(string start, string end)
+    {
+        var settings = new QqListenerSettings
+        {
+            RuleTimeWindowStartText = start,
+            RuleTimeWindowEndText = end
+        };
+
+        settings.Normalize();
+
+        Assert.Equal("00:00", settings.RuleTimeWindowStartText);
+        Assert.Equal("00:00", settings.RuleTimeWindowEndText);
+    }
+
+    [Fact]
     public void MissingPrimaryAndBackupUsesDisabledDefaults()
     {
         using var directory = new TemporaryDirectory();

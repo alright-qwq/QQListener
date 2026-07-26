@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace QQListener.Models;
@@ -57,6 +58,27 @@ public partial class QqListenerSettings : ObservableObject
     [ObservableProperty]
     private string _blacklistText = "";
 
+    [ObservableProperty]
+    private string _allowedSourcesText = "";
+
+    [ObservableProperty]
+    private bool _ruleTimeWindowEnabled;
+
+    [ObservableProperty]
+    private string _ruleTimeWindowStartText = "00:00";
+
+    [ObservableProperty]
+    private string _ruleTimeWindowEndText = "00:00";
+
+    [ObservableProperty]
+    private bool _normalTopmost;
+
+    [ObservableProperty]
+    private bool _importantTopmost;
+
+    [ObservableProperty]
+    private bool _callingTopmost = true;
+
     [JsonIgnore]
     public IReadOnlyList<string> ImportantPersons => SplitLines(ImportantPersonsText);
 
@@ -65,6 +87,9 @@ public partial class QqListenerSettings : ObservableObject
 
     [JsonIgnore]
     public IReadOnlyList<string> Blacklist => SplitLines(BlacklistText);
+
+    [JsonIgnore]
+    public IReadOnlyList<string> AllowedSources => SplitLines(AllowedSourcesText);
 
     [JsonIgnore]
     public bool SuppressAutoSave => _suppressAutoSaveCount > 0;
@@ -153,6 +178,27 @@ public partial class QqListenerSettings : ObservableObject
         CallingDurationSeconds = Math.Clamp(CallingDurationSeconds, 1, 86400);
         RollingSpeed = Math.Clamp(RollingSpeed, 0.0, 4.0);
         CallingKeyword = (CallingKeyword ?? "").Trim();
+
+        if (!TimeOnly.TryParseExact(
+                RuleTimeWindowStartText,
+                "HH:mm",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var start)
+            || !TimeOnly.TryParseExact(
+                RuleTimeWindowEndText,
+                "HH:mm",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var end))
+        {
+            RuleTimeWindowStartText = "00:00";
+            RuleTimeWindowEndText = "00:00";
+            return;
+        }
+
+        RuleTimeWindowStartText = start.ToString("HH:mm", CultureInfo.InvariantCulture);
+        RuleTimeWindowEndText = end.ToString("HH:mm", CultureInfo.InvariantCulture);
     }
 
     private static IReadOnlyList<string> SplitLines(string value)

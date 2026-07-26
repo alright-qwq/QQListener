@@ -15,18 +15,26 @@ public sealed class PrivacyTests
         "secret-blacklist",
         "secret-person",
         "secret-important",
-        "secret-calling"
+        "secret-calling",
+        "secret-source",
+        "23:59"
     ];
 
     [Fact]
     public void RuleReasonsNeverContainPrivateRuleValues()
     {
         var settings = Settings();
+        settings.AllowedSourcesText = "qq.toast";
+        settings.RuleTimeWindowEnabled = true;
+        settings.RuleTimeWindowStartText = "00:00";
+        settings.RuleTimeWindowEndText = "23:59";
         var evaluator = new MessageRuleEvaluator(settings);
 
         var results = new[]
         {
             evaluator.Evaluate(Event("normal", "secret-blacklist", "blacklist")),
+            evaluator.Evaluate(Event("normal", "normal", "source", source: "secret-source")),
+            evaluator.Evaluate(Event("normal", "normal", "time", receivedAt: DateTimeOffset.Parse("2026-07-17T23:59:00Z"))),
             evaluator.Evaluate(Event("normal", "secret-calling", "calling")),
             evaluator.Evaluate(Event("secret-person", "normal", "person")),
             evaluator.Evaluate(Event("normal", "secret-important", "important")),
@@ -37,6 +45,8 @@ public sealed class PrivacyTests
         Assert.Equal(
             [
                 "命中黑名单规则",
+                "来源不在允许列表",
+                "不在允许时间段",
                 "命中呼叫关键词",
                 "命中重要人物规则",
                 "命中重要关键词",
@@ -126,16 +136,21 @@ public sealed class PrivacyTests
         SomeoneAtMe = true
     };
 
-    private static MessageEvent Event(string sender, string body, string key) => new(
-        "qq.toast",
+    private static MessageEvent Event(
+        string sender,
+        string body,
+        string key,
+        string source = "qq.toast",
+        DateTimeOffset? receivedAt = null) => new(
+        source,
         "QQ",
         sender,
         "private-conversation",
         body,
-        DateTimeOffset.Parse("2026-07-17T00:00:00Z"),
+        receivedAt ?? DateTimeOffset.Parse("2026-07-17T00:00:00Z"),
         MessageImportance.Normal,
         [sender, body],
-        $"qq.toast:{key}");
+        $"{source}:{key}");
 
     private static WindowsNotificationReadResult Success(params WindowsToastSnapshot[] snapshots) =>
         new(WindowsNotificationReadStatus.Success, snapshots, "success");

@@ -13,8 +13,19 @@ public partial class QqListenerSettings : ObservableObject
     };
 
     private readonly object _saveLock = new();
+    private readonly Action<string, string, string?, bool> _replaceFile;
     private volatile int _suppressAutoSaveCount;
     private bool _preserveBackupOnNextSave;
+
+    public QqListenerSettings() : this(File.Replace)
+    {
+    }
+
+    internal QqListenerSettings(Action<string, string, string?, bool> replaceFile)
+    {
+        ArgumentNullException.ThrowIfNull(replaceFile);
+        _replaceFile = replaceFile;
+    }
 
     [ObservableProperty]
     private bool _isEnabled = true;
@@ -233,15 +244,15 @@ public partial class QqListenerSettings : ObservableObject
             }
             else if (_preserveBackupOnNextSave)
             {
-                File.Replace(temporaryPath, SettingsFilePath, null, ignoreMetadataErrors: true);
+                _replaceFile(temporaryPath, SettingsFilePath, null, true);
             }
             else
             {
-                File.Replace(
+                _replaceFile(
                     temporaryPath,
                     SettingsFilePath,
                     BackupFilePath,
-                    ignoreMetadataErrors: true);
+                    true);
             }
 
             _preserveBackupOnNextSave = false;

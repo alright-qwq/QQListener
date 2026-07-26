@@ -155,7 +155,7 @@ public sealed class QqListenerSettingsTests
     }
 
     [Fact]
-    public void FailedReplacePreservesFilesAndDeletesTemporaryFile()
+    public void OpenReadHandleUsesPlatformReplaceSemantics()
     {
         using var directory = new TemporaryDirectory();
         var settings = new QqListenerSettings
@@ -177,9 +177,60 @@ public sealed class QqListenerSettingsTests
             FileAccess.Read,
             FileShare.Read);
 
-        Assert.ThrowsAny<IOException>(() => settings.Save());
-        Assert.Equal(primaryBefore, File.ReadAllText(settings.SettingsFilePath));
-        Assert.Equal(backupBefore, File.ReadAllText(settings.BackupFilePath));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.ThrowsAny<IOException>(() => settings.Save());
+            Assert.Equal(primaryBefore, File.ReadAllText(settings.SettingsFilePath));
+            Assert.Equal(backupBefore, File.ReadAllText(settings.BackupFilePath));
+        }
+        else
+        {
+            settings.Save();
+            Assert.Equal("third", ReadString(settings.SettingsFilePath, "BlacklistText"));
+            Assert.Equal("second", ReadString(settings.BackupFilePath, "BlacklistText"));
+        }
+
+        Assert.Empty(Directory.GetFiles(directory.Path, "settings.json.*.tmp"));
+    }
+
+    [Fact]
+    public void InjectedReplaceFailurePreservesFilesAndDeletesTemporaryFile()
+    {
+        using var directory = new TemporaryDirectory();
+        var settings = new QqListenerSettings
+        {
+            SettingsDirectory = directory.Path,
+            IsEnabled = false,
+            BlacklistText = "first"
+        };
+        settings.Save();
+        settings.BlacklistText = "second";
+        settings.Save();
+        var primaryBefore = File.ReadAllText(settings.SettingsFilePath);
+        var backupBefore = File.ReadAllText(settings.BackupFilePath);
+
+        string? temporaryPath = null;
+        var temporaryExistedAtReplace = false;
+        var failing = new QqListenerSettings((source, _, _, _) =>
+        {
+            temporaryPath = source;
+            temporaryExistedAtReplace = File.Exists(source);
+            throw new IOException("injected replace failure");
+        })
+        {
+            SettingsDirectory = directory.Path,
+            IsEnabled = false,
+            BlacklistText = "third"
+        };
+
+        var exception = Assert.Throws<IOException>(() => failing.Save());
+
+        Assert.Equal("injected replace failure", exception.Message);
+        Assert.True(temporaryExistedAtReplace);
+        Assert.NotNull(temporaryPath);
+        Assert.False(File.Exists(temporaryPath));
+        Assert.Equal(primaryBefore, File.ReadAllText(failing.SettingsFilePath));
+        Assert.Equal(backupBefore, File.ReadAllText(failing.BackupFilePath));
         Assert.Empty(Directory.GetFiles(directory.Path, "settings.json.*.tmp"));
     }
 

@@ -8,9 +8,11 @@ using QQListener.Services;
 
 namespace QQListener.Automations.Actions;
 
-[ActionInfo("QQListener.ShowLatestMessage", "显示最后一条 QQ 消息", "", addDefaultToMenu: false)]
+[ActionInfo(AutomationId, "显示最后一条 QQ 消息", "", addDefaultToMenu: false)]
 public class ShowLatestMessageAction(QqListenerSettings settings) : ActionBase
 {
+    internal const string AutomationId = "QQListener.ShowLatestMessage";
+
     protected override async Task OnInvoke()
     {
         await base.OnInvoke();

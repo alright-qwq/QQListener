@@ -4,6 +4,9 @@ using QQListener.Services;
 
 namespace QQListener.Automations.Triggers;
 
-[TriggerInfo("QQListener.ImportantMessageReceived", "收到重要 QQ 消息时", "\uE7C1")]
+[TriggerInfo(AutomationId, "收到重要 QQ 消息时", "\uE7C1")]
 public sealed class ImportantMessageReceivedTrigger(MessageAutomationEventHub hub)
-    : MessageReceivedTriggerBase(hub, MessageImportance.Important);
+    : MessageReceivedTriggerBase(hub, MessageImportance.Important)
+{
+    internal const string AutomationId = "QQListener.ImportantMessageReceived";
+}

@@ -28,9 +28,11 @@ public abstract class MessageReceivedTriggerBase(
 
     protected virtual void RaiseTrigger() => Trigger();
 
+    internal bool MatchesImportance(MessageImportance candidate) => candidate == importance;
+
     private void OnMessageReceived(object? sender, MessageAutomationEventArgs args)
     {
-        if (args.Importance == importance)
+        if (MatchesImportance(args.Importance))
         {
             RaiseTrigger();
         }

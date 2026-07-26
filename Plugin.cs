@@ -47,10 +47,7 @@ public class Plugin : PluginBase
 
         services.AddNotificationProvider<QqNotificationProvider>();
         services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();
-        RegisterBaseActions(services);
-        services.AddTrigger<NormalMessageReceivedTrigger>();
-        services.AddTrigger<ImportantMessageReceivedTrigger>();
-        services.AddTrigger<CallingMessageReceivedTrigger>();
+        RegisterAutomations(services);
         RegisterActionMenu();
 
         services.AddSettingsPage<QqListenerSettingsPage>();
@@ -113,6 +110,33 @@ public class Plugin : PluginBase
         services.AddAction<ClearLatestMessageAction>();
     }
 
+    internal static void RegisterAutomations(IServiceCollection services)
+    {
+        RegisterBaseActions(services);
+        services.AddTrigger<NormalMessageReceivedTrigger>();
+        services.AddTrigger<ImportantMessageReceivedTrigger>();
+        services.AddTrigger<CallingMessageReceivedTrigger>();
+    }
+
+    internal static IReadOnlyList<AutomationActionMenuContract> CreateActionMenuContracts() =>
+    [
+        new(
+            typeof(SetListenerEnabledAction),
+            SetListenerEnabledAction.AutomationId,
+            "设置监听状态",
+            "\uE73C"),
+        new(
+            typeof(ShowLatestMessageAction),
+            ShowLatestMessageAction.AutomationId,
+            "显示最后一条 QQ 消息",
+            "\uE02B"),
+        new(
+            typeof(ClearLatestMessageAction),
+            ClearLatestMessageAction.AutomationId,
+            "清空最后一条 QQ 消息",
+            "\uE74D")
+    ];
+
     private static void RegisterActionMenu()
     {
         const string groupName = "QQListener 行动";
@@ -122,29 +146,31 @@ public class Plugin : PluginBase
         }
 
         var children = IActionService.ActionMenuTree[groupName];
-        if (!children.Contains("设置监听状态"))
+        foreach (var contract in CreateActionMenuContracts())
         {
-            children.Add(new ActionMenuTreeItem<SetListenerEnabledActionSettings>(
-                "QQListener.SetListenerEnabled",
-                "设置监听状态",
-                "\uE73C",
-                _ => { }));
-        }
+            if (children.Contains(contract.Name)) continue;
 
-        if (!children.Contains("显示最后一条 QQ 消息"))
-        {
-            children.Add(new ActionMenuTreeItem(
-                "QQListener.ShowLatestMessage",
-                "显示最后一条 QQ 消息",
-                "\uE02B"));
-        }
-
-        if (!children.Contains("清空最后一条 QQ 消息"))
-        {
-            children.Add(new ActionMenuTreeItem(
-                "QQListener.ClearLatestMessage",
-                "清空最后一条 QQ 消息",
-                "\uE74D"));
+            if (contract.ActionType == typeof(SetListenerEnabledAction))
+            {
+                children.Add(new ActionMenuTreeItem<SetListenerEnabledActionSettings>(
+                    contract.ActionId,
+                    contract.Name,
+                    contract.IconGlyph,
+                    _ => { }));
+            }
+            else
+            {
+                children.Add(new ActionMenuTreeItem(
+                    contract.ActionId,
+                    contract.Name,
+                    contract.IconGlyph));
+            }
         }
     }
 }
+
+internal sealed record AutomationActionMenuContract(
+    Type ActionType,
+    string ActionId,
+    string Name,
+    string IconGlyph);

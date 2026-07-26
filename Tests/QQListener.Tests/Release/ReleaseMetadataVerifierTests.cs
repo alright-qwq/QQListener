@@ -256,6 +256,46 @@ public sealed class ReleaseMetadataVerifierTests
             error.Contains("file-directory collision", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PackageRejectsLeafCollisionSeparatedByOrdinalNeighbor(bool reverseOrder)
+    {
+        var entries = new[]
+        {
+            new ArchiveItem("a", "leaf"),
+            new ArchiveItem("a-", "ordinal neighbor"),
+            new ArchiveItem("a/b", "child")
+        };
+        if (reverseOrder)
+        {
+            Array.Reverse(entries);
+        }
+
+        using var fixture = ReleaseFixture.Create(extraEntries: entries);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("file-directory collision", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PackageAuditsNearZipLimitDeepPathWithoutCreatingTemporaryDirectory()
+    {
+        var deepPrefix = "leaf/" + string.Join('/', Enumerable.Repeat("a", 4096)) + "/";
+        var deepPath = deepPrefix + new string('z', 65000 - deepPrefix.Length);
+        Assert.Equal(65000, Encoding.UTF8.GetByteCount(deepPath));
+        using var fixture = ReleaseFixture.Create(extraEntries:
+        [
+            new ArchiveItem("leaf", "file"),
+            new ArchiveItem(deepPath, "child")
+        ]);
+
+        AssertScanRejectsBeforeExtraction(fixture, "file-directory collision");
+    }
+
     [Fact]
     public void ScanFailureDoesNotCreateTemporaryDirectory()
     {
@@ -444,7 +484,9 @@ public sealed class ReleaseMetadataVerifierTests
         Assert.NotEmpty(error.ToString());
     }
 
-    private static void AssertScanRejectsBeforeExtraction(ReleaseFixture fixture)
+    private static void AssertScanRejectsBeforeExtraction(
+        ReleaseFixture fixture,
+        string? expectedError = null)
     {
         var factoryCalls = 0;
         WithTemporaryDirectoryFactory(
@@ -457,6 +499,11 @@ public sealed class ReleaseMetadataVerifierTests
             {
                 var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
                 Assert.False(result.Success);
+                if (expectedError is not null)
+                {
+                    Assert.Contains(result.Errors, error =>
+                        error.Contains(expectedError, StringComparison.OrdinalIgnoreCase));
+                }
             });
         Assert.Equal(0, factoryCalls);
     }

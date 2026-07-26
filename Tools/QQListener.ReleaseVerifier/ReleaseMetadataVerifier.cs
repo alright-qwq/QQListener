@@ -231,7 +231,7 @@ public static class ReleaseMetadataVerifier
         using var archive = ZipFile.OpenRead(cipxPath);
         var auditErrorCount = errors.Count;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var impliedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var safePaths = new List<(string Path, string SortKey)>();
         var requiredEntries = RequiredRootFiles.ToDictionary(
             name => name,
             _ => (ZipArchiveEntry?)null,
@@ -251,10 +251,7 @@ public static class ReleaseMetadataVerifier
                 errors.Add($"archive entry '{name}' is duplicated by case-insensitive name.");
             }
 
-            for (var separator = name.IndexOf('/'); separator >= 0; separator = name.IndexOf('/', separator + 1))
-            {
-                impliedDirectories.Add(name[..separator]);
-            }
+            safePaths.Add((name, name + "/"));
 
             var basename = name.Split('/').Last();
             var reservedName = RequiredRootFiles.FirstOrDefault(required =>
@@ -275,11 +272,17 @@ public static class ReleaseMetadataVerifier
             if (requiredEntries.ContainsKey(name)) requiredEntries[name] = entry;
         }
 
-        foreach (var filePath in seen)
+        safePaths.Sort((left, right) =>
+            StringComparer.OrdinalIgnoreCase.Compare(left.SortKey, right.SortKey));
+        for (var index = 1; index < safePaths.Count; index++)
         {
-            if (impliedDirectories.Contains(filePath))
+            var previous = safePaths[index - 1].Path;
+            var current = safePaths[index].Path;
+            if (current.Length > previous.Length
+                && current.StartsWith(previous, StringComparison.OrdinalIgnoreCase)
+                && current[previous.Length] == '/')
             {
-                errors.Add($"archive entry '{filePath}' has a file-directory collision.");
+                errors.Add($"archive entry '{current}' has a file-directory collision.");
             }
         }
 

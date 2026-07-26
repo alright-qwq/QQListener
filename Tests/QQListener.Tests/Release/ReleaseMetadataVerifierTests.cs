@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -484,6 +485,100 @@ public sealed class ReleaseMetadataVerifierTests
     }
 
     [Fact]
+    public void ClassicEocdRejectsDeclaredEntryCountBeforeMaterialization()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive(CreateClassicEocd(entryCount: 513));
+
+        AssertScanRejectsBeforeExtraction(
+            fixture,
+            "archive metadata declares more than 512 entries");
+    }
+
+    [Fact]
+    public void Zip64EocdRejectsDeclaredEntryCountBeforeMaterialization()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive(CreateZip64Eocd(entryCount: 513));
+
+        AssertScanRejectsBeforeExtraction(
+            fixture,
+            "archive metadata declares more than 512 entries");
+    }
+
+    [Fact]
+    public void OversizedCentralDirectoryMetadataIsRejectedBeforeMaterialization()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive(CreateClassicEocd(
+            entryCount: 1,
+            centralDirectorySize: 32U * 1024 * 1024 + 1));
+
+        AssertScanRejectsBeforeExtraction(
+            fixture,
+            "central directory exceeds the 32 MiB safety limit");
+    }
+
+    [Fact]
+    public void OverlappingClassicCentralDirectoryIsRejectedBeforeMaterialization()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive(CreateClassicEocd(
+            entryCount: 1,
+            centralDirectorySize: 11,
+            prefixLength: 10));
+
+        AssertScanRejectsBeforeExtraction(fixture, "central directory overlaps ZIP metadata");
+    }
+
+    [Fact]
+    public void TruncatedZip64LocatorIsRejectedBeforeMaterialization()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive(CreateClassicEocd(
+            entryCount: ushort.MaxValue,
+            centralDirectorySize: uint.MaxValue,
+            centralDirectoryOffset: uint.MaxValue));
+
+        AssertScanRejectsBeforeExtraction(fixture, "ZIP64 locator is missing or truncated");
+    }
+
+    [Fact]
+    public void OutOfRangeZip64RecordOffsetIsRejectedBeforeMaterialization()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive(CreateZip64LocatorWithOffset(ulong.MaxValue));
+
+        AssertScanRejectsBeforeExtraction(fixture, "ZIP64 record offset is out of range");
+    }
+
+    [Fact]
+    public void ChecksumMismatchPreventsZipMetadataParsing()
+    {
+        using var fixture = ReleaseFixture.Create();
+        fixture.ReplaceArchive([0x01, 0x02, 0x03], checksumOverride: new string('0', 32));
+        var factoryCalls = 0;
+
+        WithTemporaryDirectoryFactory(
+            () =>
+            {
+                factoryCalls++;
+                throw new InvalidOperationException("factory must not be called");
+            },
+            () =>
+            {
+                var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+                Assert.False(result.Success);
+                Assert.Contains(result.Errors, error =>
+                    error.Contains("checksum", StringComparison.OrdinalIgnoreCase));
+                Assert.DoesNotContain(result.Errors, error =>
+                    error.Contains("ZIP metadata", StringComparison.OrdinalIgnoreCase));
+            });
+
+        Assert.Equal(0, factoryCalls);
+    }
+
+    [Fact]
     public void DefaultArchiveBudgetAcceptsExactEntryAndTotalLimits()
     {
         var budget = ReleaseMetadataVerifier.CreateArchiveResourceBudget();
@@ -624,6 +719,62 @@ public sealed class ReleaseMetadataVerifierTests
         return prefix + new string('x', size - prefix.Length);
     }
 
+    private static byte[] CreateClassicEocd(
+        ushort entryCount,
+        uint centralDirectorySize = 0,
+        uint centralDirectoryOffset = 0,
+        int prefixLength = 0)
+    {
+        var bytes = new byte[prefixLength + 22];
+        var eocd = bytes.AsSpan(prefixLength);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd, 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd[8..], entryCount);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd[10..], entryCount);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd[12..], centralDirectorySize);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd[16..], centralDirectoryOffset);
+        return bytes;
+    }
+
+    private static byte[] CreateZip64Eocd(ulong entryCount)
+    {
+        var bytes = new byte[56 + 20 + 22];
+        var record = bytes.AsSpan(0, 56);
+        BinaryPrimitives.WriteUInt32LittleEndian(record, 0x06064b50);
+        BinaryPrimitives.WriteUInt64LittleEndian(record[4..], 44);
+        BinaryPrimitives.WriteUInt16LittleEndian(record[12..], 45);
+        BinaryPrimitives.WriteUInt16LittleEndian(record[14..], 45);
+        BinaryPrimitives.WriteUInt64LittleEndian(record[24..], entryCount);
+        BinaryPrimitives.WriteUInt64LittleEndian(record[32..], entryCount);
+
+        var locator = bytes.AsSpan(56, 20);
+        BinaryPrimitives.WriteUInt32LittleEndian(locator, 0x07064b50);
+        BinaryPrimitives.WriteUInt64LittleEndian(locator[8..], 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(locator[16..], 1);
+
+        WriteZip64ClassicEocd(bytes.AsSpan(76, 22));
+        return bytes;
+    }
+
+    private static byte[] CreateZip64LocatorWithOffset(ulong recordOffset)
+    {
+        var bytes = new byte[20 + 22];
+        var locator = bytes.AsSpan(0, 20);
+        BinaryPrimitives.WriteUInt32LittleEndian(locator, 0x07064b50);
+        BinaryPrimitives.WriteUInt64LittleEndian(locator[8..], recordOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(locator[16..], 1);
+        WriteZip64ClassicEocd(bytes.AsSpan(20, 22));
+        return bytes;
+    }
+
+    private static void WriteZip64ClassicEocd(Span<byte> eocd)
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd, 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd[8..], ushort.MaxValue);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd[10..], ushort.MaxValue);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd[12..], uint.MaxValue);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd[16..], uint.MaxValue);
+    }
+
     private static string CreateDirectory(string path)
     {
         Directory.CreateDirectory(path);
@@ -755,6 +906,12 @@ public sealed class ReleaseMetadataVerifierTests
                 }
             }
 
+            WriteChecksum(checksumOverride);
+        }
+
+        public void ReplaceArchive(byte[] contents, string? checksumOverride = null)
+        {
+            System.IO.File.WriteAllBytes(CipxPath, contents);
             WriteChecksum(checksumOverride);
         }
 

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
@@ -21,6 +22,15 @@ public static class ReleaseMetadataVerifier
     private const int MaxArchiveEntries = 512;
     private const long MaxEntryBytes = 128L * 1024 * 1024;
     private const long MaxExtractedBytes = 256L * 1024 * 1024;
+    // 32 MiB is intentionally far above a legitimate 65,000-byte deep-path
+    // directory record while bounding name/extra-field materialization for 512 entries.
+    private const ulong MaxCentralDirectoryBytes = 32UL * 1024 * 1024;
+    private const uint ClassicEocdSignature = 0x06054b50;
+    private const uint Zip64EocdSignature = 0x06064b50;
+    private const uint Zip64LocatorSignature = 0x07064b50;
+    private const int ClassicEocdLength = 22;
+    private const int Zip64LocatorLength = 20;
+    private const int Zip64EocdMinimumLength = 56;
     private static readonly string[] RequiredRootFiles =
         ["manifest.yml", "QQListener.dll", "README.md", "CHANGELOG.md", "icon.png"];
     private static readonly Regex CanonicalVersionPattern = new(
@@ -267,11 +277,18 @@ public static class ReleaseMetadataVerifier
             throw new FileNotFoundException("CIPX file is missing.", cipxPath);
         }
 
+        var directoryMetadata = AuditArchiveDirectoryMetadata(cipxPath);
         using var archive = ZipFile.OpenRead(cipxPath);
         var auditErrorCount = errors.Count;
         if (archive.Entries.Count > MaxArchiveEntries)
         {
             errors.Add($"archive contains more than {MaxArchiveEntries} entries.");
+            throw new FormatException("archive directory audit failed.");
+        }
+
+        if ((ulong)archive.Entries.Count != directoryMetadata.EntryCount)
+        {
+            errors.Add("archive entry count does not match its ZIP metadata.");
             throw new FormatException("archive directory audit failed.");
         }
 
@@ -511,6 +528,242 @@ public static class ReleaseMetadataVerifier
             && segment is not "." and not "..");
     }
 
+    private static ArchiveDirectoryMetadata AuditArchiveDirectoryMetadata(string cipxPath)
+    {
+        using var stream = new FileStream(cipxPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var eocd = ReadClassicEocd(stream);
+        if (eocd.DiskNumber != 0
+            || eocd.CentralDirectoryDiskNumber != 0
+            || eocd.EntriesOnDisk != eocd.TotalEntries)
+        {
+            throw new InvalidDataException("archive ZIP metadata declares a multi-disk archive.");
+        }
+
+        var usesZip64 = eocd.EntriesOnDisk == ushort.MaxValue
+                        || eocd.TotalEntries == ushort.MaxValue
+                        || eocd.CentralDirectorySize == uint.MaxValue
+                        || eocd.CentralDirectoryOffset == uint.MaxValue;
+        if (usesZip64)
+        {
+            return ReadZip64DirectoryMetadata(stream, eocd);
+        }
+
+        var entryCount = (ulong)eocd.TotalEntries;
+        var centralDirectorySize = (ulong)eocd.CentralDirectorySize;
+        var centralDirectoryOffset = (ulong)eocd.CentralDirectoryOffset;
+        ValidateArchiveDirectoryBounds(
+            entryCount,
+            centralDirectorySize,
+            centralDirectoryOffset,
+            (ulong)eocd.Offset);
+        return new ArchiveDirectoryMetadata(entryCount);
+    }
+
+    private static ClassicEocdMetadata ReadClassicEocd(FileStream stream)
+    {
+        if (stream.Length < ClassicEocdLength)
+        {
+            throw new InvalidDataException("archive ZIP metadata is missing or truncated.");
+        }
+
+        var searchLength = (int)Math.Min(
+            stream.Length,
+            ClassicEocdLength + (long)ushort.MaxValue);
+        var tail = new byte[searchLength];
+        var tailOffset = stream.Length - searchLength;
+        ReadExactlyAt(stream, tailOffset, tail, "archive ZIP metadata is truncated.");
+
+        for (var index = tail.Length - ClassicEocdLength; index >= 0; index--)
+        {
+            var candidate = tail.AsSpan(index);
+            if (BinaryPrimitives.ReadUInt32LittleEndian(candidate) != ClassicEocdSignature)
+            {
+                continue;
+            }
+
+            var commentLength = BinaryPrimitives.ReadUInt16LittleEndian(candidate[20..]);
+            if (index + ClassicEocdLength + commentLength != tail.Length)
+            {
+                continue;
+            }
+
+            return new ClassicEocdMetadata(
+                tailOffset + index,
+                BinaryPrimitives.ReadUInt16LittleEndian(candidate[4..]),
+                BinaryPrimitives.ReadUInt16LittleEndian(candidate[6..]),
+                BinaryPrimitives.ReadUInt16LittleEndian(candidate[8..]),
+                BinaryPrimitives.ReadUInt16LittleEndian(candidate[10..]),
+                BinaryPrimitives.ReadUInt32LittleEndian(candidate[12..]),
+                BinaryPrimitives.ReadUInt32LittleEndian(candidate[16..]));
+        }
+
+        throw new InvalidDataException("archive ZIP metadata is missing or truncated.");
+    }
+
+    private static ArchiveDirectoryMetadata ReadZip64DirectoryMetadata(
+        FileStream stream,
+        ClassicEocdMetadata classicEocd)
+    {
+        var locatorOffset = classicEocd.Offset - Zip64LocatorLength;
+        if (locatorOffset < 0)
+        {
+            throw new InvalidDataException("archive ZIP64 locator is missing or truncated.");
+        }
+
+        Span<byte> locator = stackalloc byte[Zip64LocatorLength];
+        ReadExactlyAt(
+            stream,
+            locatorOffset,
+            locator,
+            "archive ZIP64 locator is missing or truncated.");
+        if (BinaryPrimitives.ReadUInt32LittleEndian(locator) != Zip64LocatorSignature)
+        {
+            throw new InvalidDataException("archive ZIP64 locator is missing or truncated.");
+        }
+
+        var recordDiskNumber = BinaryPrimitives.ReadUInt32LittleEndian(locator[4..]);
+        var recordOffset = BinaryPrimitives.ReadUInt64LittleEndian(locator[8..]);
+        var totalDisks = BinaryPrimitives.ReadUInt32LittleEndian(locator[16..]);
+        if (recordDiskNumber != 0 || totalDisks != 1)
+        {
+            throw new InvalidDataException("archive ZIP metadata declares a multi-disk archive.");
+        }
+
+        if (recordOffset > long.MaxValue
+            || recordOffset > (ulong)locatorOffset
+            || (ulong)locatorOffset - recordOffset < Zip64EocdMinimumLength)
+        {
+            throw new InvalidDataException("archive ZIP64 record offset is out of range.");
+        }
+
+        Span<byte> record = stackalloc byte[Zip64EocdMinimumLength];
+        ReadExactlyAt(
+            stream,
+            (long)recordOffset,
+            record,
+            "archive ZIP64 record is missing or truncated.");
+        if (BinaryPrimitives.ReadUInt32LittleEndian(record) != Zip64EocdSignature)
+        {
+            throw new InvalidDataException("archive ZIP64 record is malformed.");
+        }
+
+        var sizeAfterHeader = BinaryPrimitives.ReadUInt64LittleEndian(record[4..]);
+        if (sizeAfterHeader < 44)
+        {
+            throw new InvalidDataException("archive ZIP64 record is malformed.");
+        }
+
+        var recordLength = CheckedAdd(12, sizeAfterHeader, "archive ZIP64 record length is out of range.");
+        var recordEnd = CheckedAdd(
+            recordOffset,
+            recordLength,
+            "archive ZIP64 record length is out of range.");
+        if (recordEnd != (ulong)locatorOffset)
+        {
+            throw new InvalidDataException("archive ZIP64 record overlaps or is detached from its locator.");
+        }
+
+        var diskNumber = BinaryPrimitives.ReadUInt32LittleEndian(record[16..]);
+        var centralDirectoryDiskNumber = BinaryPrimitives.ReadUInt32LittleEndian(record[20..]);
+        var entriesOnDisk = BinaryPrimitives.ReadUInt64LittleEndian(record[24..]);
+        var totalEntries = BinaryPrimitives.ReadUInt64LittleEndian(record[32..]);
+        if (diskNumber != 0
+            || centralDirectoryDiskNumber != 0
+            || entriesOnDisk != totalEntries)
+        {
+            throw new InvalidDataException("archive ZIP metadata declares a multi-disk archive.");
+        }
+
+        var centralDirectorySize = BinaryPrimitives.ReadUInt64LittleEndian(record[40..]);
+        var centralDirectoryOffset = BinaryPrimitives.ReadUInt64LittleEndian(record[48..]);
+        ValidateZip64ClassicFields(classicEocd, totalEntries, centralDirectorySize, centralDirectoryOffset);
+        ValidateArchiveDirectoryBounds(
+            totalEntries,
+            centralDirectorySize,
+            centralDirectoryOffset,
+            recordOffset);
+        return new ArchiveDirectoryMetadata(totalEntries);
+    }
+
+    private static void ValidateZip64ClassicFields(
+        ClassicEocdMetadata classicEocd,
+        ulong entryCount,
+        ulong centralDirectorySize,
+        ulong centralDirectoryOffset)
+    {
+        if ((classicEocd.TotalEntries != ushort.MaxValue
+             && classicEocd.TotalEntries != entryCount)
+            || (classicEocd.CentralDirectorySize != uint.MaxValue
+                && classicEocd.CentralDirectorySize != centralDirectorySize)
+            || (classicEocd.CentralDirectoryOffset != uint.MaxValue
+                && classicEocd.CentralDirectoryOffset != centralDirectoryOffset))
+        {
+            throw new InvalidDataException("archive classic and ZIP64 metadata disagree.");
+        }
+    }
+
+    private static void ValidateArchiveDirectoryBounds(
+        ulong entryCount,
+        ulong centralDirectorySize,
+        ulong centralDirectoryOffset,
+        ulong metadataOffset)
+    {
+        if (entryCount > MaxArchiveEntries)
+        {
+            throw new InvalidDataException(
+                $"archive metadata declares more than {MaxArchiveEntries} entries.");
+        }
+
+        if (centralDirectorySize > MaxCentralDirectoryBytes)
+        {
+            throw new InvalidDataException(
+                "archive central directory exceeds the 32 MiB safety limit.");
+        }
+
+        var centralDirectoryEnd = CheckedAdd(
+            centralDirectoryOffset,
+            centralDirectorySize,
+            "archive central directory offset is out of range.");
+        if (centralDirectoryOffset > metadataOffset || centralDirectoryEnd > metadataOffset)
+        {
+            throw new InvalidDataException("archive central directory overlaps ZIP metadata.");
+        }
+    }
+
+    private static ulong CheckedAdd(ulong left, ulong right, string error)
+    {
+        try
+        {
+            return checked(left + right);
+        }
+        catch (OverflowException exception)
+        {
+            throw new InvalidDataException(error, exception);
+        }
+    }
+
+    private static void ReadExactlyAt(
+        FileStream stream,
+        long offset,
+        Span<byte> destination,
+        string error)
+    {
+        if (offset < 0 || offset > stream.Length - destination.Length)
+        {
+            throw new InvalidDataException(error);
+        }
+
+        stream.Position = offset;
+        try
+        {
+            stream.ReadExactly(destination);
+        }
+        catch (EndOfStreamException exception)
+        {
+            throw new InvalidDataException(error, exception);
+        }
+    }
+
     private static void ValidateCanonical(List<string> errors, string source, string value)
     {
         try
@@ -592,6 +845,15 @@ public static class ReleaseMetadataVerifier
     private sealed record ManifestMetadata(string Version, string EntranceAssembly);
     private sealed record DllMetadata(string SimpleName, string AssemblyVersion, string FileVersion);
     private sealed record PackageMetadata(ManifestMetadata Manifest, DllMetadata Dll);
+    private sealed record ArchiveDirectoryMetadata(ulong EntryCount);
+    private sealed record ClassicEocdMetadata(
+        long Offset,
+        ushort DiskNumber,
+        ushort CentralDirectoryDiskNumber,
+        ushort EntriesOnDisk,
+        ushort TotalEntries,
+        uint CentralDirectorySize,
+        uint CentralDirectoryOffset);
 }
 
 internal sealed class ArchiveResourceBudget(long totalLimit)

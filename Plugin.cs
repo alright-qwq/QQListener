@@ -7,6 +7,7 @@ using ClassIsland.Core.Models.Automation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using QQListener.Automations.Actions;
+using QQListener.Automations.Triggers;
 using QQListener.Components;
 using QQListener.Models;
 using QQListener.Services;
@@ -54,6 +55,9 @@ public class Plugin : PluginBase
         services.AddNotificationProvider<QqNotificationProvider>();
         services.AddComponent<LatestQqMessageComponent, LatestQqMessageComponentSettingsControl>();
         RegisterBaseActions(services);
+        services.AddTrigger<NormalMessageReceivedTrigger>();
+        services.AddTrigger<ImportantMessageReceivedTrigger>();
+        services.AddTrigger<CallingMessageReceivedTrigger>();
         RegisterActionMenu();
 
         services.AddSettingsPage<QqListenerSettingsPage>();
@@ -77,6 +81,7 @@ public class Plugin : PluginBase
         services.AddSingleton<IQqListenerDelay, SystemQqListenerDelay>();
         services.AddSingleton<ClassIslandMessageNotifier>();
         services.AddSingleton<LatestMessageState>();
+        services.AddSingleton<MessageAutomationEventHub>();
         services.AddSingleton<QqListenerWorker>();
         services.AddSingleton(diagnostics);
     }

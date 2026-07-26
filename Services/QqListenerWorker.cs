@@ -10,6 +10,7 @@ public sealed class QqListenerWorker
     private readonly LatestMessageState _latestMessage;
     private readonly IQqListenerDelay _delay;
     private readonly QqListenerDiagnosticsState _diagnostics;
+    private readonly MessageAutomationEventHub _automationEventHub;
     private readonly object _stateLock = new();
     private long _generation;
     private CancellationTokenSource _generationCancellation = new();
@@ -20,13 +21,15 @@ public sealed class QqListenerWorker
         IQqNotificationPoller poller,
         LatestMessageState latestMessage,
         IQqListenerDelay delay,
-        QqListenerDiagnosticsState diagnostics)
+        QqListenerDiagnosticsState diagnostics,
+        MessageAutomationEventHub automationEventHub)
     {
         _settings = settings;
         _poller = poller;
         _latestMessage = latestMessage;
         _delay = delay;
         _diagnostics = diagnostics;
+        _automationEventHub = automationEventHub;
         _settings.PropertyChanged += OnSettingsPropertyChanged;
     }
 
@@ -135,6 +138,7 @@ public sealed class QqListenerWorker
                     _latestMessage.Update(message);
                 }
 
+                _automationEventHub.Publish(message);
                 await dispatchAsync(message, linkedCancellation.Token);
             }
         }

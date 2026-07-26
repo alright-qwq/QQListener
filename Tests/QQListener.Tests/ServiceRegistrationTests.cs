@@ -26,6 +26,7 @@ public sealed class ServiceRegistrationTests
 
         Assert.NotNull(provider.GetRequiredService<IQqNotificationPoller>());
         Assert.NotNull(provider.GetRequiredService<QqListenerWorker>());
+        Assert.NotNull(provider.GetRequiredService<MessageAutomationEventHub>());
         Assert.NotNull(provider.GetRequiredService<MessageEventPipeline>());
         Assert.NotNull(provider.GetRequiredService<MessageRulePreviewService>());
         var constructor = Assert.Single(typeof(QqNotificationProvider).GetConstructors());

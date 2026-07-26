@@ -158,18 +158,43 @@ public class QqListenerWorkerTests
         Assert.False(latest.HasMessage);
     }
 
+    [Fact]
+    public async Task AcceptedPollEventPublishesOnceBeforeDispatch()
+    {
+        var order = new List<string>();
+        var hub = new MessageAutomationEventHub(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageAutomationEventHub>.Instance);
+        hub.MessageReceived += (_, args) => order.Add("hub:" + args.Importance);
+        var worker = CreateWorker(
+            new QqListenerSettings { IsEnabled = true },
+            new SequencePoller(Accepted(Event("one"))),
+            new LatestMessageState(),
+            hub: hub);
+
+        await worker.PollOnceAndDispatchAsync(false, (message, _) =>
+        {
+            order.Add("dispatch:" + message.Body);
+            return Task.CompletedTask;
+        }, default);
+
+        Assert.Equal(["hub:Normal", "dispatch:one"], order);
+    }
+
     private static QqListenerWorker CreateWorker(
         QqListenerSettings settings,
         IQqNotificationPoller poller,
         LatestMessageState latest,
-        IQqListenerDelay? delay = null)
+        IQqListenerDelay? delay = null,
+        MessageAutomationEventHub? hub = null)
     {
         return new QqListenerWorker(
             settings,
             poller,
             latest,
             delay ?? new ImmediateDelay(),
-            new QqListenerDiagnosticsState());
+            new QqListenerDiagnosticsState(),
+            hub ?? new MessageAutomationEventHub(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageAutomationEventHub>.Instance));
     }
 
     private static MessageEvent Event(string body) => new(

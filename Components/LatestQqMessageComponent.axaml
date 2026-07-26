@@ -23,6 +23,7 @@
                    TextTrimming="CharacterEllipsis"
                    VerticalAlignment="Center" />
         <TextBlock Text="{Binding MessageText}"
+                   IsVisible="{Binding IsMessageVisible}"
                    TextTrimming="CharacterEllipsis"
                    VerticalAlignment="Center" />
     </StackPanel>

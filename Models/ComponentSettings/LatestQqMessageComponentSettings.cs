@@ -14,5 +14,14 @@ public partial class LatestQqMessageComponentSettings : ObservableObject
     private bool _showStatusTag = true;
 
     [ObservableProperty]
+    private MessageImportance _minimumImportance = MessageImportance.Normal;
+
+    [ObservableProperty]
+    private bool _showMessageBody = true;
+
+    [ObservableProperty]
+    private bool _hideSensitiveContent;
+
+    [ObservableProperty]
     private string _placeholderText = "暂无 QQ 消息";
 }

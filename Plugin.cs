@@ -102,6 +102,7 @@ public class Plugin : PluginBase
     {
         services.AddAction<SetListenerEnabledAction, SetListenerEnabledActionSettingsControl>();
         services.AddAction<ShowLatestMessageAction>();
+        services.AddAction<ClearLatestMessageAction>();
     }
 
     private static void RegisterActionMenu()
@@ -128,6 +129,14 @@ public class Plugin : PluginBase
                 "QQListener.ShowLatestMessage",
                 "显示最后一条 QQ 消息",
                 "\uE02B"));
+        }
+
+        if (!children.Contains("清空最后一条 QQ 消息"))
+        {
+            children.Add(new ActionMenuTreeItem(
+                "QQListener.ClearLatestMessage",
+                "清空最后一条 QQ 消息",
+                "\uE74D"));
         }
     }
 }

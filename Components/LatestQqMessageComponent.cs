@@ -33,11 +33,16 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
         AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, bool>(
             nameof(IsSenderVisible), o => o.IsSenderVisible);
 
+    public static readonly DirectProperty<LatestQqMessageComponent, bool> IsMessageVisibleProperty =
+        AvaloniaProperty.RegisterDirect<LatestQqMessageComponent, bool>(
+            nameof(IsMessageVisible), o => o.IsMessageVisible);
+
     private string _statusText = "";
     private string _senderText = "";
     private string _messageText = "";
     private bool _isStatusVisible;
     private bool _isSenderVisible;
+    private bool _isMessageVisible;
 
     public string StatusText
     {
@@ -67,6 +72,12 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
     {
         get => _isSenderVisible;
         private set => SetAndRaise(IsSenderVisibleProperty, ref _isSenderVisible, value);
+    }
+
+    public bool IsMessageVisible
+    {
+        get => _isMessageVisible;
+        private set => SetAndRaise(IsMessageVisibleProperty, ref _isMessageVisible, value);
     }
 
     public LatestQqMessageComponent()
@@ -127,24 +138,14 @@ public partial class LatestQqMessageComponent : ComponentBase<LatestQqMessageCom
 
     private void UpdateContent()
     {
-        var settings = Settings;
-        if (_latestMessage is not { HasMessage: true })
-        {
-            IsVisible = settings?.ShowPlaceholder ?? true;
-            StatusText = "";
-            SenderText = "";
-            MessageText = settings?.PlaceholderText ?? "暂无 QQ 消息";
-            IsStatusVisible = false;
-            IsSenderVisible = false;
-            return;
-        }
-
-        IsVisible = true;
-        StatusText = _latestMessage.IsCalling ? "呼叫" : _latestMessage.IsImportant ? "重要" : "";
-        SenderText = _latestMessage.Sender;
-        MessageText = string.IsNullOrWhiteSpace(_latestMessage.Message) ? _latestMessage.Sender : _latestMessage.Message;
-        IsStatusVisible = (settings?.ShowStatusTag ?? true) && !string.IsNullOrEmpty(StatusText);
-        IsSenderVisible = (settings?.ShowSender ?? true) && !string.IsNullOrWhiteSpace(SenderText);
+        var presentation = LatestQqMessagePresenter.Create(_latestMessage, Settings);
+        IsVisible = presentation.IsVisible;
+        StatusText = presentation.StatusText;
+        SenderText = presentation.SenderText;
+        MessageText = presentation.MessageText;
+        IsStatusVisible = presentation.IsStatusVisible;
+        IsSenderVisible = presentation.IsSenderVisible;
+        IsMessageVisible = presentation.IsMessageVisible;
     }
 
 }

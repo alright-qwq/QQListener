@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -292,17 +293,24 @@ public static class ReleaseMetadataVerifier
             throw new FormatException("archive directory audit failed.");
         }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var safePaths = new List<(string Path, string SortKey)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var safePaths = new List<(string Path, string ComparisonKey, string SortKey)>();
         var declaredBudget = CreateArchiveResourceBudget();
         var requiredEntries = RequiredRootFiles.ToDictionary(
-            name => name,
-            _ => (ZipArchiveEntry?)null,
+            CreateKnownSafeArchiveComparisonKey,
+            name => (ExactName: name, Entry: (ZipArchiveEntry?)null),
             StringComparer.Ordinal);
 
         foreach (var entry in archive.Entries)
         {
             var name = entry.FullName;
+            if (!TryCreateArchiveComparisonKey(name, out var comparisonKey))
+            {
+                errors.Add(
+                    "archive contains an entry that is not a safe relative path or Windows-portable name.");
+                continue;
+            }
+
             var entryLimit = name == "manifest.yml" ? MaxManifestBytes : MaxEntryBytes;
             var budgetError = declaredBudget.AuditDeclared(name, entry.Length, entryLimit);
             if (budgetError is not null)
@@ -310,57 +318,55 @@ public static class ReleaseMetadataVerifier
                 errors.Add(budgetError);
             }
 
-            if (!IsSafeArchivePath(name))
+            if (!seen.Add(comparisonKey))
             {
-                errors.Add($"archive entry '{name}' is not a safe relative path.");
-                continue;
+                errors.Add($"archive entry '{name}' is duplicated by canonical case-insensitive name.");
             }
 
-            if (!seen.Add(name))
-            {
-                errors.Add($"archive entry '{name}' is duplicated by case-insensitive name.");
-            }
+            safePaths.Add((name, comparisonKey, comparisonKey + "/"));
 
-            safePaths.Add((name, name + "/"));
-
-            var basename = name.Split('/').Last();
-            var reservedName = RequiredRootFiles.FirstOrDefault(required =>
-                basename.Equals(required, StringComparison.OrdinalIgnoreCase));
-            if (reservedName is not null && !name.Equals(reservedName, StringComparison.Ordinal))
+            var basenameKey = comparisonKey[(comparisonKey.LastIndexOf('/') + 1)..];
+            if (requiredEntries.TryGetValue(basenameKey, out var reservedEntry)
+                && !name.Equals(reservedEntry.ExactName, StringComparison.Ordinal))
             {
                 errors.Add($"archive reserved entry '{name}' must use its exact root-level name.");
             }
 
-            if (name.EndsWith(".cipx", StringComparison.OrdinalIgnoreCase)
-                || basename.Equals("checksums.md", StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith(".md5", StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith(".md5sum", StringComparison.OrdinalIgnoreCase))
+            if (comparisonKey.EndsWith(".CIPX", StringComparison.Ordinal)
+                || basenameKey.Equals("CHECKSUMS.MD", StringComparison.Ordinal)
+                || comparisonKey.EndsWith(".MD5", StringComparison.Ordinal)
+                || comparisonKey.EndsWith(".MD5SUM", StringComparison.Ordinal))
             {
                 errors.Add($"archive entry '{name}' is a nested or generated artifact.");
             }
 
-            if (requiredEntries.ContainsKey(name)) requiredEntries[name] = entry;
+            if (requiredEntries.TryGetValue(comparisonKey, out var requiredEntry)
+                && name.Equals(requiredEntry.ExactName, StringComparison.Ordinal))
+            {
+                requiredEntries[comparisonKey] = (requiredEntry.ExactName, entry);
+            }
         }
 
         safePaths.Sort((left, right) =>
-            StringComparer.OrdinalIgnoreCase.Compare(left.SortKey, right.SortKey));
+            StringComparer.Ordinal.Compare(left.SortKey, right.SortKey));
         for (var index = 1; index < safePaths.Count; index++)
         {
-            var previous = safePaths[index - 1].Path;
-            var current = safePaths[index].Path;
-            if (current.Length > previous.Length
-                && current.StartsWith(previous, StringComparison.OrdinalIgnoreCase)
-                && current[previous.Length] == '/')
+            var previous = safePaths[index - 1];
+            var current = safePaths[index];
+            if (current.ComparisonKey.Length > previous.ComparisonKey.Length
+                && current.ComparisonKey.StartsWith(previous.ComparisonKey, StringComparison.Ordinal)
+                && current.ComparisonKey[previous.ComparisonKey.Length] == '/')
             {
-                errors.Add($"archive entry '{current}' has a file-directory collision.");
+                errors.Add(
+                    $"archive entry '{current.Path}' has a canonical file-directory collision.");
             }
         }
 
         foreach (var required in requiredEntries)
         {
-            if (required.Value is null)
+            if (required.Value.Entry is null)
             {
-                errors.Add($"archive is missing root {required.Key}.");
+                errors.Add($"archive is missing root {required.Value.ExactName}.");
             }
         }
 
@@ -511,11 +517,11 @@ public static class ReleaseMetadataVerifier
         }
     }
 
-    private static bool IsSafeArchivePath(string name)
+    private static bool TryCreateArchiveComparisonKey(string name, out string key)
     {
+        key = "";
         if (string.IsNullOrEmpty(name)
             || name.Contains('\\')
-            || name.Contains('\0')
             || name.Contains(':')
             || Path.IsPathRooted(name))
         {
@@ -523,9 +529,77 @@ public static class ReleaseMetadataVerifier
         }
 
         var segments = name.Split('/');
-        return segments.All(segment =>
-            !string.IsNullOrEmpty(segment)
-            && segment is not "." and not "..");
+        var comparisonSegments = new string[segments.Length];
+        for (var index = 0; index < segments.Length; index++)
+        {
+            var segment = segments[index];
+            if (string.IsNullOrEmpty(segment)
+                || segment is "." or ".."
+                || segment.EndsWith('.')
+                || segment.EndsWith(' ')
+                || segment.Any(character =>
+                    character <= '\u001f'
+                    || character == '\u007f'
+                    || character is '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*'))
+            {
+                return false;
+            }
+
+            string comparisonSegment;
+            try
+            {
+                if (!segment.IsNormalized(NormalizationForm.FormC))
+                {
+                    return false;
+                }
+
+                comparisonSegment = segment
+                    .Normalize(NormalizationForm.FormC)
+                    .ToUpperInvariant()
+                    .Normalize(NormalizationForm.FormC);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+
+            var extensionIndex = comparisonSegment.IndexOf('.');
+            var deviceStem = extensionIndex >= 0
+                ? comparisonSegment[..extensionIndex]
+                : comparisonSegment;
+            if (IsWindowsDeviceStem(deviceStem))
+            {
+                return false;
+            }
+
+            comparisonSegments[index] = comparisonSegment;
+        }
+
+        key = string.Join('/', comparisonSegments);
+        return true;
+    }
+
+    private static string CreateKnownSafeArchiveComparisonKey(string name)
+    {
+        if (!TryCreateArchiveComparisonKey(name, out var key))
+        {
+            throw new InvalidOperationException("required archive root name is not Windows-portable.");
+        }
+
+        return key;
+    }
+
+    private static bool IsWindowsDeviceStem(string stem)
+    {
+        if (stem is "CON" or "PRN" or "AUX" or "NUL" or "CONIN$" or "CONOUT$")
+        {
+            return true;
+        }
+
+        return stem.Length == 4
+               && (stem.StartsWith("COM", StringComparison.Ordinal)
+                   || stem.StartsWith("LPT", StringComparison.Ordinal))
+               && stem[3] is >= '1' and <= '9';
     }
 
     private static ArchiveDirectoryMetadata AuditArchiveDirectoryMetadata(string cipxPath)

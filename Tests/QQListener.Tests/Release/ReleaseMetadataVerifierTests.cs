@@ -183,6 +183,115 @@ public sealed class ReleaseMetadataVerifierTests
     }
 
     [Theory]
+    [InlineData("README.md.")]
+    [InlineData("assets/trailing-space /file.txt")]
+    [InlineData("assets/file.txt ")]
+    [InlineData("assets/bad<name>.txt")]
+    [InlineData("assets/bad>name.txt")]
+    [InlineData("assets/bad\"name.txt")]
+    [InlineData("assets/bad|name.txt")]
+    [InlineData("assets/bad?name.txt")]
+    [InlineData("assets/bad*name.txt")]
+    public void PackageRejectsWindowsNonPortableSegments(string entryName)
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(entryName, "unsafe")]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("Windows-portable", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("NUL")]
+    [InlineData("con.txt")]
+    [InlineData("assets/PrN.md")]
+    [InlineData("assets/AUX")]
+    [InlineData("assets/COM1.log")]
+    [InlineData("assets/com9")]
+    [InlineData("assets/LPT1.txt")]
+    [InlineData("assets/lpt9")]
+    [InlineData("assets/CONIN$.txt")]
+    [InlineData("assets/conout$")]
+    public void PackageRejectsWindowsDeviceNamesIncludingExtensions(string entryName)
+    {
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(entryName, "device")]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("Windows-portable", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PackageRejectsControlCharacterWithoutEchoingUnsafeName()
+    {
+        const string secret = "secret-control-payload";
+        var entryName = $"assets/{secret}\u0001.txt";
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(entryName, "unsafe")]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+        var errors = string.Join(Environment.NewLine, result.Errors);
+
+        Assert.False(result.Success);
+        Assert.Contains("Windows-portable", errors, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(secret, errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u0001", errors, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PackageRejectsNonNfcArchivePath()
+    {
+        const string nonNfcName = "assets/cafe\u0301.txt";
+        Assert.False(nonNfcName.IsNormalized(NormalizationForm.FormC));
+        using var fixture = ReleaseFixture.Create(
+            extraEntries: [new ArchiveItem(nonNfcName, "non-nfc")]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("Windows-portable", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PackageRejectsCanonicalUnicodeDuplicatePaths()
+    {
+        using var fixture = ReleaseFixture.Create(extraEntries:
+        [
+            new ArchiveItem("assets/É.txt", "first"),
+            new ArchiveItem("ASSETS/é.TXT", "second")
+        ]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("canonical case-insensitive", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PackageRejectsCanonicalUnicodeAncestorCollision()
+    {
+        using var fixture = ReleaseFixture.Create(extraEntries:
+        [
+            new ArchiveItem("assets/É", "file"),
+            new ArchiveItem("ASSETS/é/child.txt", "child")
+        ]);
+
+        var result = ReleaseMetadataVerifier.VerifyPackage(fixture.Path, "Release");
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("canonical file-directory collision", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
     [InlineData("subdir/manifest.yml")]
     [InlineData("MANIFEST.YML")]
     [InlineData("subdir/QQListener.dll")]

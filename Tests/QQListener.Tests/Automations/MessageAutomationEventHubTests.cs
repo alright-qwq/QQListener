@@ -38,8 +38,8 @@ public sealed class MessageAutomationEventHubTests
     {
         var logger = new RecordingLogger<MessageAutomationEventHub>();
         var hub = new MessageAutomationEventHub(logger);
-        hub.MessageReceived += (_, _) =>
-            throw new InvalidOperationException("secret-exception-message");
+        var subscriber = new ThrowingSubscriber();
+        hub.MessageReceived += subscriber.OnMessageReceived;
 
         hub.Publish(new MessageEvent(
             "secret-source", "QQ", "secret-sender", "secret-conversation",
@@ -48,6 +48,7 @@ public sealed class MessageAutomationEventHubTests
             "secret-deduplication-key"));
 
         var text = Assert.Single(logger.Messages);
+        Assert.Contains(typeof(ThrowingSubscriber).FullName!, text, StringComparison.Ordinal);
         Assert.Contains(typeof(InvalidOperationException).FullName!, text, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-exception-message", text, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-sender", text, StringComparison.Ordinal);
@@ -66,6 +67,14 @@ public sealed class MessageAutomationEventHubTests
         importance,
         ["Alice", "message"],
         "qq.toast:message");
+
+    private sealed class ThrowingSubscriber
+    {
+        public void OnMessageReceived(object? sender, MessageAutomationEventArgs args)
+        {
+            throw new InvalidOperationException("secret-exception-message");
+        }
+    }
 
     private sealed class RecordingLogger<T> : ILogger<T>
     {

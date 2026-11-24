@@ -138,8 +138,8 @@
             </controls:SettingsExpander>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE917;}"
-                                       Header="普通消息显示时长（秒）"
-                                       Description="普通 QQ 消息的提醒显示时长，范围 1~3600 秒">
+                                       Header="普通消息显示时长上限（秒）"
+                                       Description="普通 QQ 消息的提醒显示时长上限，实际时长按内容字数自适应，范围 1~3600 秒">
                 <controls:SettingsExpander.Footer>
                     <TextBox Text="{Binding Settings.NormalDurationSeconds, Mode=TwoWay}"
                              Width="100"
@@ -148,8 +148,8 @@
             </controls:SettingsExpander>
 
             <controls:SettingsExpander IconSource="{ci:FluentIconSource Glyph=&#xE735;}"
-                                       Header="重要消息显示时长（秒）"
-                                       Description="重要 QQ 消息的提醒显示时长，范围 1~3600 秒">
+                                       Header="重要消息显示时长上限（秒）"
+                                       Description="重要 QQ 消息的提醒显示时长上限，实际时长按内容字数自适应，范围 1~3600 秒">
                 <controls:SettingsExpander.Footer>
                     <TextBox Text="{Binding Settings.ImportantDurationSeconds, Mode=TwoWay}"
                              Width="100"

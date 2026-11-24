@@ -39,14 +39,26 @@ public sealed record MessageEvent(
         }
     }
 
+    /// <summary>
+    /// 通知正文：合并为单行显示，发送者与正文之间用全角冒号分隔。
+    /// </summary>
     public string DisplayBody
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(Body)) return DisplaySender;
-            return string.IsNullOrWhiteSpace(DisplaySender)
-                ? Body
-                : $"{DisplaySender}{Environment.NewLine}{Body}";
+            var sender = CollapseToSingleLine(DisplaySender);
+            var body = CollapseToSingleLine(Body);
+            if (string.IsNullOrWhiteSpace(body)) return sender;
+            if (string.IsNullOrWhiteSpace(sender)) return body;
+            return $"{sender}：{body}";
         }
+    }
+
+    private static string CollapseToSingleLine(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        return string.Join(" ", value.Split(
+            ["\r\n", "\n", "\r"],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 }

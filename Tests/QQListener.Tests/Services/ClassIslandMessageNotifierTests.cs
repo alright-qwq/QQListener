@@ -35,11 +35,40 @@ public class ClassIslandMessageNotifierTests
             CallingDurationSeconds = 999999
         };
         var notifier = new ClassIslandMessageNotifier(settings);
+        var longText = new string('测', 50000);
 
-        Assert.Equal(TimeSpan.FromSeconds(1), notifier.GetDuration(MessageImportance.Normal));
-        Assert.Equal(TimeSpan.FromSeconds(3600), notifier.GetDuration(MessageImportance.Important));
-        Assert.Equal(TimeSpan.FromSeconds(86400), notifier.GetDuration(MessageImportance.Calling));
+        Assert.Equal(TimeSpan.FromSeconds(1), notifier.GetDuration(CreateMessage(MessageImportance.Normal, longText)));
+        Assert.Equal(TimeSpan.FromSeconds(3600), notifier.GetDuration(CreateMessage(MessageImportance.Important, longText)));
+        Assert.Equal(TimeSpan.FromSeconds(86400), notifier.GetDuration(CreateMessage(MessageImportance.Calling, longText)));
     }
+
+    [Fact]
+    public void MessageDurationScalesWithTextLengthAndStopsAtConfiguredCap()
+    {
+        var notifier = new ClassIslandMessageNotifier(new QqListenerSettings
+        {
+            NormalDurationSeconds = 10
+        });
+
+        var shortDuration = notifier.GetDuration(CreateMessage(MessageImportance.Normal, "你好"));
+        var longDuration = notifier.GetDuration(CreateMessage(MessageImportance.Normal, new string('测', 200)));
+
+        Assert.True(shortDuration < longDuration);
+        Assert.True(shortDuration >= TimeSpan.FromSeconds(2));
+        Assert.Equal(TimeSpan.FromSeconds(10), longDuration);
+    }
+
+    [Fact]
+    public void CallingKeepsConfiguredDuration()
+    {
+        var notifier = new ClassIslandMessageNotifier(new QqListenerSettings { CallingDurationSeconds = 600 });
+
+        Assert.Equal(TimeSpan.FromSeconds(600),
+            notifier.GetDuration(CreateMessage(MessageImportance.Calling, "呼叫")));
+    }
+
+    private static MessageEvent CreateMessage(MessageImportance importance, string body) =>
+        new("qq.toast", "QQ", "Alice", "", body, DateTimeOffset.Now, importance, ["Alice", body], "key");
 
     [Fact]
     public async Task ShowAsyncDoesNotInvokeCallbackWhenAlreadyCancelled()

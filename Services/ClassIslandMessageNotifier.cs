@@ -46,7 +46,7 @@ public class ClassIslandMessageNotifier(QqListenerSettings settings)
 
     public NotificationRequest CreateRequest(MessageEvent messageEvent)
     {
-        var duration = GetDuration(messageEvent.Importance);
+        var duration = GetDuration(messageEvent);
         NotificationContent overlay;
 
         if (settings.RollingSpeed <= 0)
@@ -91,13 +91,32 @@ public class ClassIslandMessageNotifier(QqListenerSettings settings)
         _ => settings.NormalTopmost
     };
 
-    public TimeSpan GetDuration(MessageImportance importance) => importance switch
+    /// <summary>
+    /// 计算消息展示时长：按单行文本长度自适应，配置的时长作为上限。
+    /// 呼叫类提醒保持配置时长不变（用于持续提醒，不按字数缩短）。
+    /// </summary>
+    public TimeSpan GetDuration(MessageEvent messageEvent)
     {
-        MessageImportance.Calling => TimeSpan.FromSeconds(
-            Math.Clamp(settings.CallingDurationSeconds, 1, 86400)),
-        MessageImportance.Important => TimeSpan.FromSeconds(
-            Math.Clamp(settings.ImportantDurationSeconds, 1, 3600)),
-        _ => TimeSpan.FromSeconds(
-            Math.Clamp(settings.NormalDurationSeconds, 1, 3600))
+        var maxSeconds = GetMaxDurationSeconds(messageEvent.Importance);
+
+        if (messageEvent.Importance == MessageImportance.Calling)
+        {
+            return TimeSpan.FromSeconds(maxSeconds);
+        }
+
+        // 阅读速度约 6~7 字/秒，留出基础停留时间；长消息由配置上限截断。
+        var textLength = messageEvent.DisplayBody.Length;
+        var seconds = 1.5 + textLength * 0.15;
+        var minSeconds = messageEvent.Importance == MessageImportance.Important ? 3.0 : 2.0;
+        // 配置上限可能小于最短停留时间，取两者较小值兜底。
+        var floorSeconds = Math.Min(minSeconds, maxSeconds);
+        return TimeSpan.FromSeconds(Math.Clamp(seconds, floorSeconds, maxSeconds));
+    }
+
+    private double GetMaxDurationSeconds(MessageImportance importance) => importance switch
+    {
+        MessageImportance.Calling => Math.Clamp(settings.CallingDurationSeconds, 1, 86400),
+        MessageImportance.Important => Math.Clamp(settings.ImportantDurationSeconds, 1, 3600),
+        _ => Math.Clamp(settings.NormalDurationSeconds, 1, 3600)
     };
 }
